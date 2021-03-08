@@ -19,6 +19,7 @@ package miner
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"math/big"
 	"sync"
 	"sync/atomic"
@@ -81,6 +82,10 @@ const (
 
 var (
 	commitTxsTimer = metrics.NewRegisteredTimer("worker/committxs", nil)
+	txSort0 = metrics.NewRegisteredTimer("worker/txSort0", nil)
+	txSort1 = metrics.NewRegisteredTimer("worker/txSort1", nil)
+	txHeapOp = metrics.NewRegisteredTimer("worker/txHeapOp", nil)
+	totalCommitTxOp = metrics.NewRegisteredTimer("worker/totalCommitTxOp", nil)
 )
 
 // environment is the worker's current environment and holds all of the current state information.
@@ -738,6 +743,8 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 
 	var coalescedLogs []*types.Log
 
+	var txHeapTime time.Duration
+	var totalCommitTxTime time.Duration
 	for {
 		// In the following three cases, we will interrupt the execution of the transaction.
 		// (1) new head block event arrival, the interrupt signal is 1
@@ -765,7 +772,9 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 			break
 		}
 		// Retrieve the next transaction and abort if all done
+		txHeapStart := time.Now()
 		tx := txs.Peek()
+		txHeapTime = txHeapTime + time.Since(txHeapStart)
 		if tx == nil {
 			break
 		}
@@ -779,42 +788,60 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		if tx.Protected() && !w.chainConfig.IsEIP155(w.current.header.Number) {
 			log.Trace("Ignoring reply protected transaction", "hash", tx.Hash(), "eip155", w.chainConfig.EIP155Block)
 
+			txHeapStart = time.Now()
 			txs.Pop()
+			txHeapTime = txHeapTime + time.Since(txHeapStart)
 			continue
 		}
 		// Start executing the transaction
 		w.current.state.Prepare(tx.Hash(), common.Hash{}, w.current.tcount)
 
+		commitTxStart := time.Now()
 		logs, err := w.commitTransaction(tx, coinbase)
+		totalCommitTxTime += time.Since(commitTxStart)
 		switch err {
 		case core.ErrGasLimitReached:
 			// Pop the current out-of-gas transaction without shifting in the next from the account
 			log.Trace("Gas limit exceeded for current block", "sender", from)
+			txHeapStart = time.Now()
 			txs.Pop()
+			txHeapTime = txHeapTime + time.Since(txHeapStart)
 
 		case core.ErrNonceTooLow:
 			// New head notification data race between the transaction pool and miner, shift
 			log.Trace("Skipping transaction with low nonce", "sender", from, "nonce", tx.Nonce())
+			txHeapStart = time.Now()
 			txs.Shift()
+			txHeapTime = txHeapTime + time.Since(txHeapStart)
 
 		case core.ErrNonceTooHigh:
 			// Reorg notification data race between the transaction pool and miner, skip account =
 			log.Trace("Skipping account with hight nonce", "sender", from, "nonce", tx.Nonce())
+			txHeapStart = time.Now()
 			txs.Pop()
+			txHeapTime = txHeapTime + time.Since(txHeapStart)
 
 		case nil:
 			// Everything ok, collect the logs and shift in the next transaction from the same account
 			coalescedLogs = append(coalescedLogs, logs...)
 			w.current.tcount++
+			txHeapStart = time.Now()
 			txs.Shift()
+			txHeapTime = txHeapTime + time.Since(txHeapStart)
 
 		default:
 			// Strange error, discard the transaction and get the next in line (note, the
 			// nonce-too-high clause will prevent us from executing in vain).
 			log.Debug("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
+			txHeapStart = time.Now()
 			txs.Shift()
+			txHeapTime = txHeapTime + time.Since(txHeapStart)
 		}
 	}
+
+	txHeapOp.Update(txHeapTime)
+	totalCommitTxOp.Update(totalCommitTxTime)
+	log.Info(fmt.Sprintf("====debug===== txHeapTime: %s, totalCommitTxTime: %s", txHeapTime.String(), totalCommitTxTime.String()))
 
 	if !w.isRunning() && len(coalescedLogs) > 0 {
 		// We don't push the pendingLogsEvent while we are mining. The reason is that
@@ -954,13 +981,19 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		}
 	}
 	if len(localTxs) > 0 {
+		startSort0 := time.Now()
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, localTxs)
+		txSort0.UpdateSince(start)
+		log.Info(fmt.Sprintf("====debug===== txSort0: %s", time.Since(startSort0).String()))
 		if w.commitTransactions(txs, w.coinbase, interrupt) {
 			return
 		}
 	}
 	if len(remoteTxs) > 0 {
+		startSort1 := time.Now()
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, remoteTxs)
+		txSort1.UpdateSince(start)
+		log.Info(fmt.Sprintf("====debug===== txSort1: %s", time.Since(startSort1).String()))
 		if w.commitTransactions(txs, w.coinbase, interrupt) {
 			return
 		}
