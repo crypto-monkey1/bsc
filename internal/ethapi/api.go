@@ -1267,6 +1267,7 @@ func (s *PublicTransactionPoolAPI) GetTransactionCount(ctx context.Context, addr
 		if err != nil {
 			return nil, err
 		}
+		log.Info("Get pending nonce", "nonce", nonce, "address", address.String())
 		return (*hexutil.Uint64)(&nonce), nil
 	}
 	// Resolve block number and use its state to ask for the nonce
@@ -1275,6 +1276,7 @@ func (s *PublicTransactionPoolAPI) GetTransactionCount(ctx context.Context, addr
 		return nil, err
 	}
 	nonce := state.GetNonce(address)
+	log.Info("Get none pending nonce", "nonce", nonce, "address", address.String())
 	return (*hexutil.Uint64)(&nonce), state.Error()
 }
 
@@ -1479,7 +1481,7 @@ func SubmitTransaction(ctx context.Context, b Backend, tx *types.Transaction) (c
 		addr := crypto.CreateAddress(from, tx.Nonce())
 		log.Info("Submitted contract creation", "fullhash", tx.Hash().Hex(), "contract", addr.Hex())
 	} else {
-		log.Info("Submitted transaction", "fullhash", tx.Hash().Hex(), "recipient", tx.To())
+		log.Info("Submitted transaction", "fullhash", tx.Hash().Hex(), "recipient", tx.To(), "tx gas", tx.GasPrice().String(), "tx nonce", tx.Nonce())
 	}
 	return tx.Hash(), nil
 }
