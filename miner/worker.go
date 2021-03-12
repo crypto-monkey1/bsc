@@ -85,6 +85,7 @@ var (
 	txSort0 = metrics.NewRegisteredTimer("worker/txSort0", nil)
 	txSort1 = metrics.NewRegisteredTimer("worker/txSort1", nil)
 	txHeapOp = metrics.NewRegisteredTimer("worker/txHeapOp", nil)
+	totalWasteTxTimeOp = metrics.NewRegisteredTimer("worker/totalWasteTxTimeOp", nil)
 	totalCommitTxOp = metrics.NewRegisteredTimer("worker/totalCommitTxOp", nil)
 )
 
@@ -745,6 +746,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 
 	var txHeapTime time.Duration
 	var totalCommitTxTime time.Duration
+	var totalWasteTxTime time.Duration
 	for {
 		// In the following three cases, we will interrupt the execution of the transaction.
 		// (1) new head block event arrival, the interrupt signal is 1
@@ -767,7 +769,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 			return atomic.LoadInt32(interrupt) == commitInterruptNewHead
 		}
 		// If we don't have enough gas for any further transactions then we're done
-		if w.current.gasPool.Gas() < params.TxGas {
+		if w.current.gasPool.Gas() < 500000 {
 			log.Trace("Not enough gas for further transactions", "have", w.current.gasPool, "want", params.TxGas)
 			break
 		}
@@ -813,6 +815,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 			txHeapStart = time.Now()
 			txs.Shift()
 			txHeapTime = txHeapTime + time.Since(txHeapStart)
+			totalWasteTxTime = totalWasteTxTime + time.Since(commitTxStart)
 
 		case core.ErrNonceTooHigh:
 			// Reorg notification data race between the transaction pool and miner, skip account =
@@ -820,6 +823,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 			txHeapStart = time.Now()
 			txs.Pop()
 			txHeapTime = txHeapTime + time.Since(txHeapStart)
+			totalWasteTxTime = totalWasteTxTime + time.Since(commitTxStart)
 
 		case nil:
 			// Everything ok, collect the logs and shift in the next transaction from the same account
@@ -841,6 +845,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 
 	txHeapOp.Update(txHeapTime)
 	totalCommitTxOp.Update(totalCommitTxTime)
+	totalWasteTxTimeOp.Update(totalWasteTxTime)
 	log.Info(fmt.Sprintf("====debug===== txHeapTime: %s, totalCommitTxTime: %s", txHeapTime.String(), totalCommitTxTime.String()))
 
 	if !w.isRunning() && len(coalescedLogs) > 0 {
