@@ -98,7 +98,10 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		totalTxCount++
 	}
 	totalExecutionTime := time.Since(executeStart)
-	log.Info(fmt.Sprintf("####debug execute block#### height %s, total commitTx time %s, average tx commit time %d ns",block.Number().String(), totalExecutionTime.String(), totalExecutionTime.Nanoseconds()/totalTxCount))
+	log.Info(fmt.Sprintf("####debug execute block#### height %s, total commitTx time %s",block.Number().String(), totalExecutionTime.String()))
+	if totalTxCount != 0 {
+		log.Info(fmt.Sprintf("####debug execute block#### average tx commit time %d ns", totalExecutionTime.Nanoseconds()/totalTxCount))
+	}
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	err := p.engine.Finalize(p.bc, header, statedb, &commonTxs, block.Uncles(), &receipts, &systemTxs, usedGas)
 	if err != nil {
