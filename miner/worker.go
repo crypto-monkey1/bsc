@@ -858,6 +858,9 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 
 	txHeapOp.Update(txHeapTime)
 	totalCommitTxOp.Update(totalCommitTxTime)
+	totalIncludedTxNum := totalTriedTxCount - totalUnknownErrorTxCount -totalWasteTxCount
+	log.Info(fmt.Sprintf("####debug generate block#### height %s, total commitTx time %s, total included tx number %d, total tried tx number %d, average tx commit time %s ns",
+		w.current.header.Number.String(), totalCommitTxTime.String(), totalIncludedTxNum, totalTriedTxCount, totalCommitTxTime.Nanoseconds()/totalIncludedTxNum))
 	totalWasteTxTimeOp.Update(totalWasteTxTime)
 
 	totalWasteTxCounter.Mark(totalWasteTxCount);

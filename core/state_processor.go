@@ -17,6 +17,7 @@
 package core
 
 import (
+	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
@@ -25,7 +26,9 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
+	"time"
 )
 
 // StateProcessor is a basic Processor, which takes care of transitioning
@@ -73,6 +76,9 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	commonTxs := make([]*types.Transaction, 0, len(block.Transactions()))
 	// usually do have two tx, one for validator set contract, another for system reward contract.
 	systemTxs := make([]*types.Transaction, 0, 2)
+
+	executeStart := time.Now()
+	totalTxCount := int64(0)
 	for i, tx := range block.Transactions() {
 		if isPoSA {
 			if isSystemTx, err := posa.IsSystemTransaction(tx, block.Header()); err != nil {
@@ -89,7 +95,10 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		}
 		commonTxs = append(commonTxs, tx)
 		receipts = append(receipts, receipt)
+		totalTxCount++
 	}
+	totalExecutionTime := time.Since(executeStart)
+	log.Info(fmt.Sprintf("####debug execute block#### height %s, total commitTx time %s, average tx commit time %d ns",block.Number().String(), totalExecutionTime.String(), totalExecutionTime.Nanoseconds()/totalTxCount))
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	err := p.engine.Finalize(p.bc, header, statedb, &commonTxs, block.Uncles(), &receipts, &systemTxs, usedGas)
 	if err != nil {
