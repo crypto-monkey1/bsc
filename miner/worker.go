@@ -86,10 +86,11 @@ var (
 	txSort1 = metrics.NewRegisteredTimer("worker/txSort1", nil)
 	txHeapOp = metrics.NewRegisteredTimer("worker/txHeapOp", nil)
 	totalWasteTxTimeOp = metrics.NewRegisteredTimer("worker/totalWasteTxTimeOp", nil)
-	totalWasteTxCounter = metrics.NewRegisteredTimer("worker/totalWasteTxCounter", nil)
-	totalUnkownErrorTxCounter = metrics.NewRegisteredTimer("worker/totalUnkownErrorTxCounter", nil)
 	totalCommitTxOp = metrics.NewRegisteredTimer("worker/totalCommitTxOp", nil)
-	totalTriedTxCounter = metrics.NewRegisteredTimer("worker/totalTriedTxCounter", nil)
+
+	totalWasteTxCounter        = metrics.NewRegisteredMeter("worker/totalWasteTxCounter", nil)
+	totalUnknownErrorTxCounter = metrics.NewRegisteredMeter("worker/totalUnknownErrorTxCounter", nil)
+	totalTriedTxCounter        = metrics.NewRegisteredMeter("worker/totalTriedTxCounter", nil)
 )
 
 // environment is the worker's current environment and holds all of the current state information.
@@ -750,6 +751,10 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 	var txHeapTime time.Duration
 	var totalCommitTxTime time.Duration
 	var totalWasteTxTime time.Duration
+
+	totalWasteTxCount := int64(0)
+	totalUnknownErrorTxCount := int64(0)
+	totalTriedTxCount := int64(0)
 	for {
 		// In the following three cases, we will interrupt the execution of the transaction.
 		// (1) new head block event arrival, the interrupt signal is 1
@@ -802,7 +807,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		w.current.state.Prepare(tx.Hash(), common.Hash{}, w.current.tcount)
 
 		commitTxStart := time.Now()
-		totalTriedTxCounter.Count()
+		totalTriedTxCount++
 		logs, err := w.commitTransaction(tx, coinbase)
 		totalCommitTxTime += time.Since(commitTxStart)
 		switch err {
@@ -812,7 +817,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 			txHeapStart = time.Now()
 			txs.Pop()
 			txHeapTime = txHeapTime + time.Since(txHeapStart)
-			totalWasteTxCounter.Count()
+			totalWasteTxCount++
 
 		case core.ErrNonceTooLow:
 			// New head notification data race between the transaction pool and miner, shift
@@ -821,7 +826,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 			txs.Shift()
 			txHeapTime = txHeapTime + time.Since(txHeapStart)
 			totalWasteTxTime = totalWasteTxTime + time.Since(commitTxStart)
-			totalWasteTxCounter.Count()
+			totalWasteTxCount++
 
 		case core.ErrNonceTooHigh:
 			// Reorg notification data race between the transaction pool and miner, skip account =
@@ -830,7 +835,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 			txs.Pop()
 			txHeapTime = txHeapTime + time.Since(txHeapStart)
 			totalWasteTxTime = totalWasteTxTime + time.Since(commitTxStart)
-			totalWasteTxCounter.Count()
+			totalWasteTxCount++
 
 		case nil:
 			// Everything ok, collect the logs and shift in the next transaction from the same account
@@ -847,13 +852,17 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 			txHeapStart = time.Now()
 			txs.Shift()
 			txHeapTime = txHeapTime + time.Since(txHeapStart)
-			totalUnkownErrorTxCounter.Count()
+			totalUnknownErrorTxCount++
 		}
 	}
 
 	txHeapOp.Update(txHeapTime)
 	totalCommitTxOp.Update(totalCommitTxTime)
 	totalWasteTxTimeOp.Update(totalWasteTxTime)
+
+	totalWasteTxCounter.Mark(totalWasteTxCount);
+	totalUnknownErrorTxCounter.Mark(totalUnknownErrorTxCount);
+	totalTriedTxCounter.Mark(totalTriedTxCount);
 	log.Info(fmt.Sprintf("====debug===== txHeapTime: %s, totalCommitTxTime: %s", txHeapTime.String(), totalCommitTxTime.String()))
 
 	if !w.isRunning() && len(coalescedLogs) > 0 {
