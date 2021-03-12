@@ -86,7 +86,10 @@ var (
 	txSort1 = metrics.NewRegisteredTimer("worker/txSort1", nil)
 	txHeapOp = metrics.NewRegisteredTimer("worker/txHeapOp", nil)
 	totalWasteTxTimeOp = metrics.NewRegisteredTimer("worker/totalWasteTxTimeOp", nil)
+	totalWasteTxCounter = metrics.NewRegisteredTimer("worker/totalWasteTxCounter", nil)
+	totalUnkownErrorTxCounter = metrics.NewRegisteredTimer("worker/totalUnkownErrorTxCounter", nil)
 	totalCommitTxOp = metrics.NewRegisteredTimer("worker/totalCommitTxOp", nil)
+	totalTriedTxCounter = metrics.NewRegisteredTimer("worker/totalTriedTxCounter", nil)
 )
 
 // environment is the worker's current environment and holds all of the current state information.
@@ -799,31 +802,35 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		w.current.state.Prepare(tx.Hash(), common.Hash{}, w.current.tcount)
 
 		commitTxStart := time.Now()
+		totalTriedTxCounter.Count()
 		logs, err := w.commitTransaction(tx, coinbase)
 		totalCommitTxTime += time.Since(commitTxStart)
 		switch err {
 		case core.ErrGasLimitReached:
 			// Pop the current out-of-gas transaction without shifting in the next from the account
-			log.Trace("Gas limit exceeded for current block", "sender", from)
+			log.Info("Gas limit exceeded for current block", "sender", from)
 			txHeapStart = time.Now()
 			txs.Pop()
 			txHeapTime = txHeapTime + time.Since(txHeapStart)
+			totalWasteTxCounter.Count()
 
 		case core.ErrNonceTooLow:
 			// New head notification data race between the transaction pool and miner, shift
-			log.Trace("Skipping transaction with low nonce", "sender", from, "nonce", tx.Nonce())
+			log.Info("Skipping transaction with low nonce", "sender", from, "nonce", tx.Nonce())
 			txHeapStart = time.Now()
 			txs.Shift()
 			txHeapTime = txHeapTime + time.Since(txHeapStart)
 			totalWasteTxTime = totalWasteTxTime + time.Since(commitTxStart)
+			totalWasteTxCounter.Count()
 
 		case core.ErrNonceTooHigh:
 			// Reorg notification data race between the transaction pool and miner, skip account =
-			log.Trace("Skipping account with hight nonce", "sender", from, "nonce", tx.Nonce())
+			log.Info("Skipping account with hight nonce", "sender", from, "nonce", tx.Nonce())
 			txHeapStart = time.Now()
 			txs.Pop()
 			txHeapTime = txHeapTime + time.Since(txHeapStart)
 			totalWasteTxTime = totalWasteTxTime + time.Since(commitTxStart)
+			totalWasteTxCounter.Count()
 
 		case nil:
 			// Everything ok, collect the logs and shift in the next transaction from the same account
@@ -836,10 +843,11 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		default:
 			// Strange error, discard the transaction and get the next in line (note, the
 			// nonce-too-high clause will prevent us from executing in vain).
-			log.Debug("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
+			log.Info("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
 			txHeapStart = time.Now()
 			txs.Shift()
 			txHeapTime = txHeapTime + time.Since(txHeapStart)
+			totalUnkownErrorTxCounter.Count()
 		}
 	}
 
