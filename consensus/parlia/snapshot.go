@@ -21,6 +21,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/big"
 	"sort"
 
@@ -252,9 +253,11 @@ func (s *Snapshot) enoughDistance(validator common.Address) bool {
 	validatorNum := int64(len(s.validators()))
 	offset := (int64(s.Number) + 1) % int64(validatorNum)
 	if int64(idx) >= offset {
+		fmt.Println(int64(idx) - offset)
 		return int64(idx)-offset >= validatorNum/2
 	} else {
-		return int64(len(validator))+int64(idx)-offset >= validatorNum/2
+		fmt.Println(validatorNum + int64(idx) - offset)
+		return validatorNum+int64(idx)-offset >= validatorNum/2
 	}
 }
 

@@ -1398,14 +1398,16 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 			chosen := current - TriesInMemory
 
 			// If we exceeded out time allowance, flush an entire trie to disk
-			if bc.gcproc > bc.cacheConfig.TrieTimeLimit {
-				needWrite := true
+			if true {
+				canWrite := true
 				if posa, ok := bc.engine.(consensus.PoSA); ok {
 					if !posa.EnoughDistance(bc, block.Header()) {
-						needWrite = false
+						canWrite = false
 					}
 				}
-				if needWrite {
+				if canWrite {
+					log.Warn("=== debug write state", "number", block.Number().String())
+
 					// If the header is missing (canonical chain behind), we're reorging a low
 					// diff sidechain. Suspend committing until this operation is completed.
 					header := bc.GetHeaderByNumber(chosen)
@@ -1422,6 +1424,8 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 						lastWrite = chosen
 						bc.gcproc = 0
 					}
+				} else {
+					log.Warn("=== debug not write state", "number", block.Number().String())
 				}
 			}
 			// Garbage collect anything below our required write retention
