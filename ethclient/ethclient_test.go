@@ -18,12 +18,15 @@ package ethclient
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -333,5 +336,102 @@ func TestChainID(t *testing.T) {
 	}
 	if id == nil || id.Cmp(params.AllEthashProtocolChanges.ChainID) != 0 {
 		t.Fatalf("ChainID returned wrong number: %+v", id)
+	}
+}
+
+func TestClient_TransactionsInBlock(t *testing.T) {
+	client, err := Dial("http://dex-qa-s1-bsc-dev-validator-alb-501442930.ap-northeast-1.elb.amazonaws.com:8545")
+	require.NoError(t, err)
+
+	txs, err := client.TransactionsInBlock(context.Background(), big.NewInt(5477522))
+	require.NoError(t, err)
+
+	for _, tx := range txs {
+		fmt.Println(tx.Hash().String())
+	}
+}
+
+func TestClient_TransactionRecipientsInBlock(t *testing.T) {
+	client, err := Dial("http://dex-qa-s1-bsc-dev-validator-alb-501442930.ap-northeast-1.elb.amazonaws.com:8545")
+	require.NoError(t, err)
+
+	txs, err := client.TransactionRecipientsInBlock(context.Background(), big.NewInt(5477522))
+	require.NoError(t, err)
+
+	for _, tx := range txs {
+		fmt.Println(fmt.Sprintf("txHash %s, gasUsed %d, index %d", tx.TxHash.String(), tx.GasUsed, tx.TransactionIndex))
+	}
+}
+
+func TestClient_TransactionDataAndRecipient(t *testing.T) {
+	client, err := Dial("http://dex-qa-s1-bsc-dev-validator-alb-501442930.ap-northeast-1.elb.amazonaws.com:8545")
+	require.NoError(t, err)
+
+	dataAndRecipient, err := client.TransactionDataAndReceipt(context.Background(), common.HexToHash("0x516a2ab1506b020e7f49d0d0ddbc471065624d1a603087262cebf4ca114ff588"))
+	require.NoError(t, err)
+
+	fmt.Println(fmt.Sprintf("gasUsed %d, tx data %s", dataAndRecipient.Receipt.GasUsed, hex.EncodeToString(dataAndRecipient.TxData.Data())))
+}
+
+func TestSubscribe(t *testing.T) {
+	wssClient, err := Dial("wss://bsc-ws-node.nariox.org:443")
+	require.NoError(t, err)
+
+	headerChain := make(chan *types.Header)
+
+	subscribe, err := wssClient.SubscribeNewHead(context.Background(), headerChain)
+	require.NoError(t, err)
+	defer subscribe.Unsubscribe()
+
+	client, err := Dial("https://bsc-private-dataseed3.nariox.org")
+	require.NoError(t, err)
+	for header := range headerChain {
+		start := time.Now()
+		txs, err := client.TransactionRecipientsInBlock(context.Background(), header.Number);
+		batchGetTxRecipientTime := time.Since(start)
+		require.NoError(t, err)
+
+		start = time.Now()
+		for _, tx := range txs {
+			_, err := client.TransactionReceipt(context.Background(), tx.TxHash);
+			require.NoError(t, err)
+		}
+		oldGetTxRecipientQuery := time.Since(start)
+		fmt.Println(fmt.Sprintf("BlockNumber %s, txcount: %d, batchGetTxRecipient:%s, oldGetTxRecipientQuery: %s", header.Number.String(), len(txs), batchGetTxRecipientTime.String(), oldGetTxRecipientQuery.String()))
+
+		start = time.Now()
+		originalTxs, err := client.TransactionRecipientsInBlock(context.Background(), big.NewInt(5477522))
+		require.NoError(t, err)
+		batchGetTxTime := time.Since(start)
+
+		start = time.Now()
+		for _, tx := range originalTxs {
+			_, err := client.TransactionReceipt(context.Background(), tx.TxHash);
+			require.NoError(t, err)
+		}
+		oldGetTxQuery := time.Since(start)
+		fmt.Println(fmt.Sprintf("BlockNumber %s, txcount: %d, batchGetTx:%s, oldGetTxQuery: %s", header.Number.String(), len(txs), batchGetTxTime.String(), oldGetTxQuery.String()))
+
+
+
+		start = time.Now()
+		for _, tx := range originalTxs {
+			_, err := client.TransactionDataAndReceipt(context.Background(), tx.TxHash);
+			require.NoError(t, err)
+		}
+		getTxDataAndRecipient := time.Since(start)
+
+		start = time.Now()
+		for _, tx := range originalTxs {
+			_, _, err := client.TransactionByHash(context.Background(), tx.TxHash);
+			require.NoError(t, err)
+			_, err = client.TransactionReceipt(context.Background(), tx.TxHash);
+			require.NoError(t, err)
+		}
+		seperateGetTxDataAndRecipient := time.Since(start)
+
+		fmt.Println(fmt.Sprintf("BlockNumber %s, Average getTransactionDataAndReceipt: %fs, Average sum of getTransaction and getTransactionRecipient: %fs", header.Number.String(), getTxDataAndRecipient.Seconds()/float64(len(txs)), seperateGetTxDataAndRecipient.Seconds()/float64(len(txs))))
+
+		fmt.Println("########################################################")
 	}
 }
