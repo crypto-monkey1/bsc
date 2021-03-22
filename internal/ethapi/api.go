@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"sort"
 	"strings"
 	"time"
 
@@ -880,6 +881,163 @@ func (s *PublicBlockChainAPI) Call(ctx context.Context, args CallArgs, blockNrOr
 	return (hexutil.Bytes)(result), err
 }
 
+type MyLog struct {
+	Address common.Address `json:"address"`
+	// list of topics provided by the contract.
+	Topics []common.Hash `json:"topics"`
+	// supplied by the contract, usually ABI-encoded
+	Data hexutil.Bytes `json:"data"`
+	// index of the log in the block
+	Index uint `json:"logIndex"`
+}
+
+func (s *PublicBlockChainAPI) CallList(ctx context.Context, encodedTxList []hexutil.Bytes, blockNrOrHash rpc.BlockNumberOrHash, addresses []common.Address, overrides *map[common.Address]account) (map[string]interface{}, error) {
+	var accounts map[common.Address]account
+	if overrides != nil {
+		accounts = *overrides
+	}
+
+	var (
+		callctx  *callContext
+		result   *core.ExecutionResult
+		err      error
+		resList2 []map[string]interface{}
+		balances []*big.Int
+	)
+
+	res := map[string]interface{}{}
+
+	// resList := make(map[int]*returnCallList, len(encodedTxList))
+	if len(encodedTxList) > 0 {
+		logsStartIndex := 0
+		resList2 = make([]map[string]interface{}, len(encodedTxList))
+		for idx, encodedTx := range encodedTxList {
+
+			var callctxcopy *callContext
+			if callctx != nil {
+				callctxcopy = callctx.copy()
+			}
+			tx := new(types.Transaction)
+			if err := rlp.DecodeBytes(encodedTx, tx); err != nil {
+				return nil, err
+			}
+			var msg *types.Message
+
+			result, callctx, msg, err = DoCall2(ctx, s.b, tx, callctxcopy, blockNrOrHash, accounts, vm.Config{}, 0, s.b.RPCGasCap())
+			if err != nil {
+				return nil, err
+			}
+
+			logs := callctx.state.Logs()
+			thisTxLogs := logs[logsStartIndex:]
+
+			thisTxMyLogs := make([]MyLog, len(thisTxLogs))
+			for i, log := range thisTxLogs {
+
+				thisTxMyLogs[i] = MyLog{
+					Address: log.Address,
+					Topics:  log.Topics,
+					Data:    hexutil.Bytes(log.Data),
+					Index:   log.Index,
+				}
+			}
+			logsStartIndex = len(logs)
+			fields := map[string]interface{}{
+				"transactionHash":  tx.Hash(),
+				"transactionIndex": idx,
+				"gasUsed":          result.UsedGas,
+				"gasPrice":         tx.GasPrice(),
+				"from":             msg.From(),
+				"to":               tx.To(),
+				"gasLimit":         msg.Gas(),
+				"minGasLimit":      tx.Gas(), // not sure this is min...
+				"nonce":            tx.Nonce(),
+				"value":            tx.Value(),
+				"logs":             thisTxMyLogs,
+				"input":            hexutil.Bytes(tx.Data()),
+			}
+
+			if len(result.Revert()) > 0 {
+				fields["revert"] = newRevertError(result).error.Error()
+			} else {
+				fields["return"] = hexutil.Bytes(result.Return())
+			}
+
+			if result.Err != nil {
+				fields["error"] = result.Err.Error()
+			}
+
+			resList2[idx] = fields
+		}
+		res["receipts"] = resList2
+	}
+
+	if len(addresses) > 0 {
+		balances = make([]*big.Int, len(addresses))
+
+		if callctx == nil {
+			state, header, err := s.b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
+			if err != nil {
+				return nil, err
+			}
+			callctx = &callContext{
+				state:  state,
+				header: header,
+			}
+
+			if overrides != nil && !callctx.overridden {
+				for addr, account := range *overrides {
+					// Override account nonce.
+					if account.Nonce != nil {
+						callctx.state.SetNonce(addr, uint64(*account.Nonce))
+					}
+					// Override account(contract) code.
+					if account.Code != nil {
+						callctx.state.SetCode(addr, *account.Code)
+					}
+					// Override account balance.
+					if account.Balance != nil {
+						callctx.state.SetBalance(addr, (*big.Int)(*account.Balance))
+					}
+					if account.State != nil && account.StateDiff != nil {
+						return nil, fmt.Errorf("account %s has both 'state' and 'stateDiff'", addr.Hex())
+					}
+					// Replace entire state if caller requires.
+					if account.State != nil {
+						callctx.state.SetStorage(addr, *account.State)
+					}
+					// Apply state diff into specified accounts.
+					if account.StateDiff != nil {
+						for key, value := range *account.StateDiff {
+							callctx.state.SetState(addr, key, value)
+						}
+					}
+					callctx.overridden = true
+				}
+			}
+		}
+
+		for idx, address := range addresses {
+			balances[idx] = callctx.state.GetBalance(address)
+		}
+		res["balances"] = balances
+	}
+
+	return res, nil
+}
+
+func newRevertError(result *core.ExecutionResult) *revertError {
+	reason, errUnpack := abi.UnpackRevert(result.Revert())
+	err := errors.New("execution reverted")
+	if errUnpack == nil {
+		err = fmt.Errorf("execution reverted: %v", reason)
+	}
+	return &revertError{
+		error:  err,
+		reason: hexutil.Encode(result.Revert()),
+	}
+}
+
 func DoEstimateGas(ctx context.Context, b Backend, args CallArgs, blockNrOrHash rpc.BlockNumberOrHash, gasCap *big.Int) (hexutil.Uint64, error) {
 	// Binary search the gas requirement, as it may be higher than the amount used
 	var (
@@ -972,6 +1130,104 @@ func DoEstimateGas(ctx context.Context, b Backend, args CallArgs, blockNrOrHash 
 func (s *PublicBlockChainAPI) EstimateGas(ctx context.Context, args CallArgs) (hexutil.Uint64, error) {
 	blockNrOrHash := rpc.BlockNumberOrHashWithNumber(rpc.PendingBlockNumber)
 	return DoEstimateGas(ctx, s.b, args, blockNrOrHash, s.b.RPCGasCap())
+}
+
+type TempTx struct {
+	Log         MyLog       `json:"log"`
+	TxHash      common.Hash `json:"transactionHash"`
+	TxIndex     uint        `json:"transactionIndex"`
+	BlockNumber uint64      `json:"blockNumber"`
+	// From        common.Address  `json:"from"`
+	// Gas         hexutil.Uint64  `json:"gas"`
+	// GasPrice    *hexutil.Big    `json:"gasPrice"`
+	// Input       hexutil.Bytes   `json:"input"`
+	// Nonce       hexutil.Uint64  `json:"nonce"`
+	// To          *common.Address `json:"to"`
+	// Value       *hexutil.Big    `json:"value"`
+}
+
+type MyTx struct {
+	Logs        []MyLog         `json:"logs"`
+	TxHash      common.Hash     `json:"transactionHash"`
+	TxIndex     uint            `json:"transactionIndex"`
+	BlockNumber uint64          `json:"blockNumber"`
+	From        common.Address  `json:"from"`
+	Gas         hexutil.Uint64  `json:"gas"`
+	GasPrice    *hexutil.Big    `json:"gasPrice"`
+	Input       hexutil.Bytes   `json:"input"`
+	Nonce       hexutil.Uint64  `json:"nonce"`
+	To          *common.Address `json:"to"`
+	Value       *hexutil.Big    `json:"value"`
+}
+
+func (s *PublicBlockChainAPI) PendingBlockLogs(ctx context.Context, addresses []common.Address) (map[string]interface{}, error) {
+
+	blockNrOrHash := rpc.BlockNumberOrHashWithNumber(rpc.PendingBlockNumber)
+	state, _, err := s.b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
+	// _ = header
+	if err != nil {
+		return nil, err
+	}
+
+	logs := state.Logs()
+
+	tempTxLogs := make([]TempTx, len(logs))
+	for i, log := range logs {
+
+		tempTxLogs[i] = TempTx{
+			Log: MyLog{
+				Address: log.Address,
+				Topics:  log.Topics,
+				Data:    hexutil.Bytes(log.Data),
+				Index:   log.Index,
+			},
+			TxHash:      log.TxHash,
+			TxIndex:     log.TxIndex,
+			BlockNumber: log.BlockNumber,
+		}
+	}
+
+	sort.SliceStable(tempTxLogs, func(i, j int) bool { return tempTxLogs[i].TxIndex < tempTxLogs[j].TxIndex })
+	var myTxs []MyTx
+	var lastTxIndex uint
+	lastTxIndex = 10000
+	for _, tempTxLog := range tempTxLogs {
+		if lastTxIndex != tempTxLog.TxIndex {
+			lastTxIndex = tempTxLog.TxIndex
+
+			newMyTx := MyTx{
+				TxHash:      tempTxLog.TxHash,
+				TxIndex:     tempTxLog.TxIndex,
+				BlockNumber: tempTxLog.BlockNumber,
+				Logs:        []MyLog{},
+			}
+
+			if tx := s.b.GetPoolTransaction(tempTxLog.TxHash); tx != nil {
+				rpc := newRPCPendingTransaction(tx)
+				newMyTx.Value = rpc.Value
+				newMyTx.To = rpc.To
+				newMyTx.From = rpc.From
+				newMyTx.Nonce = rpc.Nonce
+				newMyTx.Gas = rpc.Gas
+				newMyTx.GasPrice = rpc.GasPrice
+				newMyTx.Input = rpc.Input
+			}
+			myTxs = append(myTxs, newMyTx)
+		}
+
+		myTxs[len(myTxs)-1].Logs = append(myTxs[len(myTxs)-1].Logs, tempTxLog.Log)
+	}
+
+	balances := make([]*big.Int, len(addresses))
+	for idx, address := range addresses {
+		balances[idx] = state.GetBalance(address)
+	}
+
+	fields := map[string]interface{}{
+		"txs":      myTxs,
+		"balances": balances,
+	}
+	return fields, nil
 }
 
 // ExecutionResult groups all structured logs emitted by the EVM
@@ -1295,6 +1551,19 @@ func (s *PublicTransactionPoolAPI) GetTransactionByHash(ctx context.Context, has
 
 	// Transaction unknown, return as such
 	return nil, nil
+}
+
+// GetTransactionsByHashList returns list of transactions for the given list of hashes
+func (s *PublicTransactionPoolAPI) GetTransactionsByHashList(ctx context.Context, hashes []common.Hash) ([]*RPCTransaction, error) {
+	txs := make([]*RPCTransaction, len(hashes))
+	for index, hash := range hashes {
+		tx, err := s.GetTransactionByHash(ctx, hash)
+		if err != nil {
+			return nil, err
+		}
+		txs[index] = tx
+	}
+	return txs, nil
 }
 
 // GetRawTransactionByHash returns the bytes of the transaction for the given hash.
