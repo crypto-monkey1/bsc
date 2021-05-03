@@ -137,6 +137,10 @@ func ApplyMessage(evm *vm.EVM, msg Message, gp *GasPool) ([]byte, uint64, bool, 
 	return NewStateTransition(evm, msg, gp).TransitionDb()
 }
 
+func ApplyMessageWithEvmError(evm *vm.EVM, msg Message, gp *GasPool) ([]byte, uint64, error, error) {
+	return NewStateTransition(evm, msg, gp).TransitionDbWithEvmError()
+}
+
 // to returns the recipient of the message.
 func (st *StateTransition) to() common.Address {
 	if st.msg == nil || st.msg.To() == nil /* contract creation */ {
@@ -236,6 +240,59 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 		st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
 	}
 	return ret, st.gasUsed(), vmerr != nil, err
+}
+
+func (st *StateTransition) TransitionDbWithEvmError() (ret []byte, usedGas uint64, vmErr error, err error) {
+	if err = st.preCheck(); err != nil {
+		return
+	}
+	msg := st.msg
+	sender := vm.AccountRef(msg.From())
+	homestead := st.evm.ChainConfig().IsHomestead(st.evm.BlockNumber)
+	istanbul := st.evm.ChainConfig().IsIstanbul(st.evm.BlockNumber)
+	contractCreation := msg.To() == nil
+
+	// Pay intrinsic gas
+	gas, err := IntrinsicGas(st.data, contractCreation, homestead, istanbul)
+	if err != nil {
+		return nil, 0, nil, err
+	}
+	if err = st.useGas(gas); err != nil {
+		return nil, 0, nil, err
+	}
+
+	var (
+		evm = st.evm
+		// vm errors do not effect consensus and are therefor
+		// not assigned to err, except for insufficient balance
+		// error.
+		vmerr error
+	)
+	if contractCreation {
+		ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
+	} else {
+		// Increment the nonce for the next transaction
+		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+		ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
+	}
+	if vmerr != nil {
+		log.Debug("VM returned with error", "err", vmerr)
+		// The only possible consensus-error would be if there wasn't
+		// sufficient balance to make the transfer happen. The first
+		// balance transfer may never fail.
+		if vmerr == vm.ErrInsufficientBalance {
+			return nil, 0, nil, vmerr
+		}
+	}
+	st.refundGas()
+
+	// consensus engine is parlia
+	if evm.ChainConfig().Parlia != nil {
+		st.state.AddBalance(consensus.SystemAddress, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
+	} else {
+		st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
+	}
+	return ret, st.gasUsed(), vmerr, err
 }
 
 func (st *StateTransition) refundGas() {
