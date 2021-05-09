@@ -654,7 +654,7 @@ func (p *Parlia) Finalize(chain consensus.ChainReader, header *types.Header, sta
 	}
 	nextForkHash := forkid.NextForkHash(p.chainConfig, p.genesisHash, number)
 	if !snap.isMajorityFork(hex.EncodeToString(nextForkHash[:])) {
-		log.Warn("there is a possible fork, and your client is not the majority. Please check...", "nextForkHash", hex.EncodeToString(nextForkHash[:]))
+		log.Debug("there is a possible fork, and your client is not the majority. Please check...", "nextForkHash", hex.EncodeToString(nextForkHash[:]))
 	}
 	// If the block is a epoch end block, verify the validator list
 	// The verification can only be done when the state is ready, it can't be done in VerifyHeader.
@@ -780,6 +780,16 @@ func (p *Parlia) Authorize(val common.Address, signFn SignerFn, signTxFn SignerT
 	p.signTxFn = signTxFn
 }
 
+func (p *Parlia) Delay(chain consensus.ChainReader, header *types.Header) *time.Duration {
+	number := header.Number.Uint64()
+	snap, err := p.snapshot(chain, number-1, header.ParentHash, nil)
+	if err != nil {
+		return nil
+	}
+	delay := p.delayForRamanujanFork(snap, header)
+	return &delay
+}
+
 // Seal implements consensus.Engine, attempting to create a sealed block using
 // the local signing credentials.
 func (p *Parlia) Seal(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
@@ -850,6 +860,14 @@ func (p *Parlia) Seal(chain consensus.ChainReader, block *types.Block, results c
 	}()
 
 	return nil
+}
+
+func (p *Parlia) EnoughDistance(chain consensus.ChainReader, header *types.Header) bool {
+	snap, err := p.snapshot(chain, header.Number.Uint64()-1, header.ParentHash, nil)
+	if err != nil {
+		return true
+	}
+	return snap.enoughDistance(p.val)
 }
 
 // CalcDifficulty is the difficulty adjustment algorithm. It returns the difficulty
