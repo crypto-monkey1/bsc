@@ -781,7 +781,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		log.Debug("Time left for mining work", "left", (*delay - w.config.DelayLeftOver).String(), "leftover", w.config.DelayLeftOver)
 		defer stopTimer.Stop()
 	}
-LOOP:
+	// LOOP:
 	for {
 		// In the following three cases, we will interrupt the execution of the transaction.
 		// (1) new head block event arrival, the interrupt signal is 1
@@ -808,14 +808,14 @@ LOOP:
 			log.Trace("Not enough gas for further transactions", "have", w.current.gasPool, "want", params.TxGas)
 			break
 		}
-		if stopTimer != nil {
-			select {
-			case <-stopTimer.C:
-				log.Info("Not enough time for further transactions", "txs", len(w.current.txs))
-				break LOOP
-			default:
-			}
-		}
+		// if stopTimer != nil {
+		// 	select {
+		// 	case <-stopTimer.C:
+		// 		log.Info("Not enough time for further transactions", "txs", len(w.current.txs))
+		// 		break LOOP
+		// 	default:
+		// 	}
+		// }
 		// Retrieve the next transaction and abort if all done
 		tx := txs.Peek()
 		if tx == nil {
