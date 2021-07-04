@@ -230,6 +230,14 @@ func (b *EthAPIBackend) SendTx(ctx context.Context, signedTx *types.Transaction)
 	return b.eth.txPool.AddLocal(signedTx)
 }
 
+func (b *EthAPIBackend) SendTxForSim(ctx context.Context, signedTx *types.Transaction) error {
+	return b.eth.txPool.AddLocalForSim(signedTx)
+}
+
+func (b *EthAPIBackend) RemoveTxForSim(ctx context.Context, signedTx *types.Transaction) error {
+	return b.eth.txPool.RemoveLocalsForSim(signedTx)
+}
+
 func (b *EthAPIBackend) GetPoolTransactions() (types.Transactions, error) {
 	pending, err := b.eth.txPool.Pending()
 	if err != nil {

@@ -184,6 +184,14 @@ func (b *LesApiBackend) SendTx(ctx context.Context, signedTx *types.Transaction)
 	return b.eth.txPool.Add(ctx, signedTx)
 }
 
+func (b *LesApiBackend) SendTxForSim(ctx context.Context, signedTx *types.Transaction) error {
+	return nil
+}
+
+func (b *LesApiBackend) RemoveTxForSim(ctx context.Context, signedTx *types.Transaction) error {
+	return nil
+}
+
 func (b *LesApiBackend) RemoveTx(txHash common.Hash) {
 	b.eth.txPool.RemoveTx(txHash)
 }

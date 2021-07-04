@@ -5420,6 +5420,20 @@ var methods = function () {
         inputFormatter: [null]
     });
 
+    var sendRawTransactionForSim = new Method({
+        name: 'sendRawTransactionForSim',
+        call: 'eth_sendRawTransactionForSim',
+        params: 1,
+        inputFormatter: [null]
+    });
+
+    var removeRawTransactionForSim = new Method({
+        name: 'removeRawTransactionForSim',
+        call: 'eth_removeRawTransactionForSim',
+        params: 1,
+        inputFormatter: [null]
+    });
+
     var sendTransaction = new Method({
         name: 'sendTransaction',
         call: 'eth_sendTransaction',
@@ -5505,6 +5519,7 @@ var methods = function () {
         call,
         estimateGas,
         sendRawTransaction,
+        sendRawTransactionForSim,
         signTransaction,
         sendTransaction,
         sign,
