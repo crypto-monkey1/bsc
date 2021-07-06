@@ -790,6 +790,7 @@ func (pool *TxPool) AddLocalForSim(tx *types.Transaction) error {
 
 func (pool *TxPool) RemoveLocalsForSim(tx *types.Transaction) error {
 	// pool.removeTx(tx.Hash(), false)
+	pool.mu.Lock()
 	from, _ := types.Sender(pool.signer, tx)
 	if pending := pool.pending[from]; pending != nil {
 		if removed, invalids := pending.Remove(tx); removed {
@@ -806,9 +807,12 @@ func (pool *TxPool) RemoveLocalsForSim(tx *types.Transaction) error {
 			pool.pendingNonces.setIfLower(from, tx.Nonce())
 			// Reduce the pending counter
 			pendingGauge.Dec(int64(1 + len(invalids)))
+			pool.mu.Unlock()
+			log.Info("Removed tx", "hash", tx.Hash())
 			return nil
 		}
 	}
+	pool.mu.Unlock()
 	log.Info("didnt remove tx", "hash", tx.Hash())
 	// from, _ := types.Sender(pool.signer, tx)
 	// delete(pool.queue, from)
