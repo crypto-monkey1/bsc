@@ -466,9 +466,9 @@ func (w *worker) mainLoop() {
 	for {
 		if w.coinbaseByDemandSet {
 			w.coinbase = w.coinbaseByDemand
-			log.Info("setting ether base in worker by demand", "coinbase", w.coinbase)
+			// log.Info("setting ether base in worker by demand", "coinbase", w.coinbase)
 		} else {
-			log.Info("no demand for coinbase", "coinbase", w.coinbase)
+			// log.Info("no demand for coinbase", "coinbase", w.coinbase)
 		}
 
 		select {

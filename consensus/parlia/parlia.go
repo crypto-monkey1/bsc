@@ -638,9 +638,9 @@ func (p *Parlia) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 	}
 	header.Time = p.blockTimeForRamanujanFork(snap, header, parent)
 
-	log.Info("setting block timestamp", "header.Time", header.Time, "uint64(time.Now().Unix())", uint64(time.Now().Unix()))
+	// log.Info("setting block timestamp", "header.Time", header.Time, "uint64(time.Now().Unix())", uint64(time.Now().Unix()))
 	header.Time = header.Time + timeOffset
-	log.Info("block time set", "header.Time", header.Time, "uint64(time.Now().Unix())", uint64(time.Now().Unix()))
+	// log.Info("block time set", "header.Time", header.Time, "uint64(time.Now().Unix())", uint64(time.Now().Unix()))
 	if header.Time < uint64(time.Now().Unix()) {
 		header.Time = uint64(time.Now().Unix())
 	}
@@ -987,7 +987,7 @@ func (p *Parlia) distributeIncoming(val common.Address, state *state.StateDB, he
 			balance = balance.Sub(balance, rewards)
 		}
 	}
-	log.Info("distribute to validator contract", "block hash", header.Hash(), "amount", balance)
+	log.Trace("distribute to validator contract", "block hash", header.Hash(), "amount", balance)
 	return p.distributeToValidator(balance, val, state, header, chain, txs, receipts, receivedTxs, usedGas, mining)
 }
 
