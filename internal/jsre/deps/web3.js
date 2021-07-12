@@ -5423,7 +5423,7 @@ var methods = function () {
     var sendRawTransactionForSim = new Method({
         name: 'sendRawTransactionForSim',
         call: 'eth_sendRawTransactionForSim',
-        params: 1,
+        params: 2,
         inputFormatter: [null]
     });
 

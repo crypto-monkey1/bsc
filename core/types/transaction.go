@@ -27,6 +27,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -189,6 +190,12 @@ func (tx *Transaction) setDecoded(inner TxData, size int) {
 	if size > 0 {
 		tx.size.Store(common.StorageSize(size))
 	}
+}
+
+func (tx *Transaction) SetTimeOffset(offset uint64) {
+	log.Info("Time of tx before", "time", tx.time, "offset", offset)
+	tx.time = tx.time.Add(time.Duration(offset) * 1e9)
+	log.Info("Time of tx after", "time", tx.time, "offset", offset)
 }
 
 func sanityCheckSignature(v *big.Int, r *big.Int, s *big.Int, maybeProtected bool) error {
