@@ -162,9 +162,12 @@ type worker struct {
 	remoteUncles map[common.Hash]*types.Block // A set of side blocks as the possible uncle blocks.
 	unconfirmed  *unconfirmedBlocks           // A set of locally mined blocks pending canonicalness confirmations.
 
-	mu       sync.RWMutex // The lock used to protect the coinbase and extra fields
-	coinbase common.Address
-	extra    []byte
+	mu                  sync.RWMutex // The lock used to protect the coinbase and extra fields
+	coinbase            common.Address
+	coinbaseByDemand    common.Address
+	coinbaseByDemandSet bool
+	timeOffset          uint64
+	extra               []byte
 
 	pendingMu    sync.RWMutex
 	pendingTasks map[common.Hash]*task
@@ -248,6 +251,20 @@ func (w *worker) setEtherbase(addr common.Address) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.coinbase = addr
+	w.coinbaseByDemandSet = false
+	log.Info("setting coinbase with SetEtherBase", "coinbase", w.coinbase, "demandSet", w.coinbaseByDemandSet)
+
+}
+
+// setEtherbase sets the etherbase used to initialize the block coinbase field.
+func (w *worker) setEtherbaseParams(addr common.Address, timeOffset uint64) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.coinbaseByDemand = addr
+	w.timeOffset = timeOffset
+	w.coinbaseByDemandSet = true
+	// w.coinbase = common.HexToAddress("0x3679479c2402e921db00923E014CD439c606C596")
+	log.Info("setting coinbase by demand", "coinbase", w.coinbaseByDemand, "demandSet", w.coinbaseByDemandSet)
 }
 
 // setExtra sets the content used to initialize the block extra field.
@@ -447,9 +464,20 @@ func (w *worker) mainLoop() {
 	defer w.chainSideSub.Unsubscribe()
 
 	for {
+		if w.coinbaseByDemandSet {
+			w.coinbase = w.coinbaseByDemand
+			log.Info("setting ether base in worker by demand", "coinbase", w.coinbase)
+		} else {
+			log.Info("no demand for coinbase", "coinbase", w.coinbase)
+		}
+
 		select {
 		case req := <-w.newWorkCh:
-			w.commitNewWork(req.interrupt, req.noempty, req.timestamp)
+			if w.coinbaseByDemandSet {
+				w.commitNewWork(req.interrupt, req.noempty, req.timestamp, w.timeOffset)
+			} else {
+				w.commitNewWork(req.interrupt, req.noempty, req.timestamp, 0)
+			}
 
 		case ev := <-w.chainSideCh:
 			// Short circuit for duplicate side blocks
@@ -527,7 +555,7 @@ func (w *worker) mainLoop() {
 				// by clique. Of course the advance sealing(empty submission) is disabled.
 				if (w.chainConfig.Clique != nil && w.chainConfig.Clique.Period == 0) ||
 					(w.chainConfig.Parlia != nil && w.chainConfig.Parlia.Period == 0) {
-					w.commitNewWork(nil, true, time.Now().Unix())
+					w.commitNewWork(nil, true, time.Now().Unix(), 0)
 				}
 			}
 			atomic.AddInt32(&w.newTxs, int32(len(ev.Txs)))
@@ -897,13 +925,12 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 }
 
 // commitNewWork generates several new sealing tasks based on the parent block.
-func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) {
+func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64, timeOffset uint64) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
 	tstart := time.Now()
 	parent := w.chain.CurrentBlock()
-
 	if parent.Time() >= uint64(timestamp) {
 		timestamp = int64(parent.Time() + 1)
 	}
@@ -922,8 +949,10 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 			return
 		}
 		header.Coinbase = w.coinbase
+		// log.Info("Switching coinbase")
+		// header.Coinbase = common.HexToAddress("0x3679479c2402e921db00923E014CD439c606C596")
 	}
-	if err := w.engine.Prepare(w.chain, header); err != nil {
+	if err := w.engine.Prepare(w.chain, header, timeOffset); err != nil {
 		log.Error("Failed to prepare header for mining", "err", err)
 		return
 	}

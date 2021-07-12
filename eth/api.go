@@ -135,6 +135,12 @@ func (api *PrivateMinerAPI) SetEtherbase(etherbase common.Address) bool {
 	return true
 }
 
+// SetEtherbase sets the etherbase of the miner
+func (api *PrivateMinerAPI) SetEtherbaseParams(etherbase common.Address, timeOffset uint64) bool {
+	api.e.SetEtherbaseParams(etherbase, timeOffset)
+	return true
+}
+
 // SetRecommitInterval updates the interval for miner sealing work recommitting.
 func (api *PrivateMinerAPI) SetRecommitInterval(interval int) {
 	api.e.Miner().SetRecommitInterval(time.Duration(interval) * time.Millisecond)
