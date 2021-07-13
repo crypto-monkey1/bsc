@@ -218,9 +218,13 @@ func (miner *Miner) SetEtherbase(addr common.Address) {
 	miner.worker.setEtherbase(addr)
 }
 
-func (miner *Miner) SetEtherbaseParams(addr common.Address, timeOffset uint64) {
+func (miner *Miner) SetEtherbaseParams(addr common.Address, timestamp uint64) {
 	miner.coinbase = addr
-	miner.worker.setEtherbaseParams(addr, timeOffset)
+	miner.worker.setEtherbaseParams(addr, timestamp)
+}
+
+func (miner *Miner) UnsetEtherbaseParams() {
+	miner.worker.unsetEtherbaseParams()
 }
 
 // EnablePreseal turns on the preseal mining feature. It's enabled by default.

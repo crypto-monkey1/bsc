@@ -166,7 +166,7 @@ type worker struct {
 	coinbase            common.Address
 	coinbaseByDemand    common.Address
 	coinbaseByDemandSet bool
-	timeOffset          uint64
+	timestamp           uint64
 	extra               []byte
 
 	pendingMu    sync.RWMutex
@@ -257,14 +257,23 @@ func (w *worker) setEtherbase(addr common.Address) {
 }
 
 // setEtherbase sets the etherbase used to initialize the block coinbase field.
-func (w *worker) setEtherbaseParams(addr common.Address, timeOffset uint64) {
+func (w *worker) setEtherbaseParams(addr common.Address, timestamp uint64) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.coinbaseByDemand = addr
-	w.timeOffset = timeOffset
+	w.timestamp = timestamp
 	w.coinbaseByDemandSet = true
 	// w.coinbase = common.HexToAddress("0x3679479c2402e921db00923E014CD439c606C596")
-	log.Info("setting coinbase by demand", "coinbase", w.coinbaseByDemand, "demandSet", w.coinbaseByDemandSet)
+	log.Info("setting coinbase by demand", "coinbase", w.coinbaseByDemand, "demandSet", w.coinbaseByDemandSet, "timestamp", timestamp)
+}
+
+func (w *worker) unsetEtherbaseParams() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.timestamp = 0
+	w.coinbaseByDemandSet = false
+	// w.coinbase = common.HexToAddress("0x3679479c2402e921db00923E014CD439c606C596")
+	log.Info("unsetting coinbase by demand", "coinbase", w.coinbaseByDemand, "demandSet", w.coinbaseByDemandSet)
 }
 
 // setExtra sets the content used to initialize the block extra field.
@@ -474,7 +483,7 @@ func (w *worker) mainLoop() {
 		select {
 		case req := <-w.newWorkCh:
 			if w.coinbaseByDemandSet {
-				w.commitNewWork(req.interrupt, req.noempty, req.timestamp, w.timeOffset)
+				w.commitNewWork(req.interrupt, req.noempty, req.timestamp, w.timestamp)
 			} else {
 				w.commitNewWork(req.interrupt, req.noempty, req.timestamp, 0)
 			}
@@ -925,7 +934,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 }
 
 // commitNewWork generates several new sealing tasks based on the parent block.
-func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64, timeOffset uint64) {
+func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64, timestampOverride uint64) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
@@ -952,7 +961,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64, 
 		// log.Info("Switching coinbase")
 		// header.Coinbase = common.HexToAddress("0x3679479c2402e921db00923E014CD439c606C596")
 	}
-	if err := w.engine.Prepare(w.chain, header, timeOffset); err != nil {
+	if err := w.engine.Prepare(w.chain, header, timestampOverride); err != nil {
 		log.Error("Failed to prepare header for mining", "err", err)
 		return
 	}

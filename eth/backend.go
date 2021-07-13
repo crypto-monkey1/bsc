@@ -447,12 +447,16 @@ func (s *Ethereum) SetEtherbase(etherbase common.Address) {
 }
 
 // SetEtherbase sets the mining reward address.
-func (s *Ethereum) SetEtherbaseParams(etherbase common.Address, timeOffset uint64) {
+func (s *Ethereum) SetEtherbaseParams(etherbase common.Address, timestamp uint64) {
 	s.lock.Lock()
 	s.etherbase = etherbase
 	s.lock.Unlock()
 
-	s.miner.SetEtherbaseParams(etherbase, timeOffset)
+	s.miner.SetEtherbaseParams(etherbase, timestamp)
+}
+
+func (s *Ethereum) UnsetEtherbaseParams() {
+	s.miner.UnsetEtherbaseParams()
 }
 
 // StartMining starts the miner with the given number of CPU threads. If mining

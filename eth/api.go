@@ -136,8 +136,13 @@ func (api *PrivateMinerAPI) SetEtherbase(etherbase common.Address) bool {
 }
 
 // SetEtherbase sets the etherbase of the miner
-func (api *PrivateMinerAPI) SetEtherbaseParams(etherbase common.Address, timeOffset uint64) bool {
-	api.e.SetEtherbaseParams(etherbase, timeOffset)
+func (api *PrivateMinerAPI) SetEtherbaseParams(etherbase common.Address, timestamp uint64) bool {
+	api.e.SetEtherbaseParams(etherbase, timestamp)
+	return true
+}
+
+func (api *PrivateMinerAPI) UnsetEtherbaseParams() bool {
+	api.e.UnsetEtherbaseParams()
 	return true
 }
 
