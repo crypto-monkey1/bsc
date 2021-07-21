@@ -146,6 +146,21 @@ func (api *PrivateMinerAPI) UnsetEtherbaseParams() bool {
 	return true
 }
 
+func (api *PrivateMinerAPI) GetPendingBlockMulti() (map[string]interface{}, error) {
+	block := api.e.GetPendingBlockMulti()
+	if block != nil {
+		response, err := ethapi.RPCMarshalBlock(block, true, true)
+		if err == nil {
+			// Pending blocks need to nil out a few fields
+			for _, field := range []string{"hash", "nonce", "miner"} {
+				response[field] = nil
+			}
+		}
+		return response, err
+	}
+	return nil, nil
+}
+
 // SetRecommitInterval updates the interval for miner sealing work recommitting.
 func (api *PrivateMinerAPI) SetRecommitInterval(interval int) {
 	api.e.Miner().SetRecommitInterval(time.Duration(interval) * time.Millisecond)

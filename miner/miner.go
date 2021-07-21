@@ -42,22 +42,23 @@ type Backend interface {
 
 // Config is the configuration parameters of mining.
 type Config struct {
-	Etherbase     common.Address `toml:",omitempty"` // Public address for block mining rewards (default = first account)
-	Notify        []string       `toml:",omitempty"` // HTTP URL list to be notified of new work packages (only useful in ethash).
-	NotifyFull    bool           `toml:",omitempty"` // Notify with pending block headers instead of work packages
-	ExtraData     hexutil.Bytes  `toml:",omitempty"` // Block extra data set by the miner
-	DelayLeftOver time.Duration  // Time for broadcast block
-	GasFloor      uint64         // Target gas floor for mined blocks.
-	GasCeil       uint64         // Target gas ceiling for mined blocks.
-	GasPrice      *big.Int       // Minimum gas price for mining a transaction
-	Recommit      time.Duration  // The time interval for miner to re-create mining work.
-	Noverify      bool           // Disable remote mining solution verification(only useful in ethash).
+	Etherbase            common.Address `toml:",omitempty"` // Public address for block mining rewards (default = first account)
+	Notify               []string       `toml:",omitempty"` // HTTP URL list to be notified of new work packages (only useful in ethash).
+	NotifyFull           bool           `toml:",omitempty"` // Notify with pending block headers instead of work packages
+	ExtraData            hexutil.Bytes  `toml:",omitempty"` // Block extra data set by the miner
+	DelayLeftOver        time.Duration  // Time for broadcast block
+	GasFloor             uint64         // Target gas floor for mined blocks.
+	GasCeil              uint64         // Target gas ceiling for mined blocks.
+	GasPrice             *big.Int       // Minimum gas price for mining a transaction
+	Recommit             time.Duration  // The time interval for miner to re-create mining work.
+	Noverify             bool           // Disable remote mining solution verification(only useful in ethash).
+	NumOfParallelWorkers int
 }
 
 // Miner creates blocks and searches for proof-of-work values.
 type Miner struct {
 	mux      *event.TypeMux
-	worker   *worker
+	worker   *multiWorker
 	coinbase common.Address
 	eth      Backend
 	engine   consensus.Engine
@@ -74,7 +75,7 @@ func New(eth Backend, config *Config, chainConfig *params.ChainConfig, mux *even
 		exitCh:  make(chan struct{}),
 		startCh: make(chan common.Address),
 		stopCh:  make(chan struct{}),
-		worker:  newWorker(config, chainConfig, engine, eth, mux, isLocalBlock, false),
+		worker:  newMultiWorker(config, chainConfig, engine, eth, mux, isLocalBlock, false),
 	}
 	go miner.update()
 
@@ -184,14 +185,15 @@ func (miner *Miner) SetRecommitInterval(interval time.Duration) {
 // Pending returns the currently pending block and associated state.
 func (miner *Miner) Pending() (*types.Block, *state.StateDB) {
 	if miner.worker.isRunning() {
-		return miner.worker.pending()
+		// log.Info("Retreiving pending block and associated state")
+		return miner.worker.regularWorker.pending()
 	} else {
 		// fallback to latest block
-		block := miner.worker.chain.CurrentBlock()
+		block := miner.worker.regularWorker.chain.CurrentBlock()
 		if block == nil {
 			return nil, nil
 		}
-		stateDb, err := miner.worker.chain.StateAt(block.Root())
+		stateDb, err := miner.worker.regularWorker.chain.StateAt(block.Root())
 		if err != nil {
 			return nil, nil
 		}
@@ -206,10 +208,11 @@ func (miner *Miner) Pending() (*types.Block, *state.StateDB) {
 // change between multiple method calls
 func (miner *Miner) PendingBlock() *types.Block {
 	if miner.worker.isRunning() {
-		return miner.worker.pendingBlock()
+		// log.Info("Retreiving pendong block")
+		return miner.worker.regularWorker.pendingBlock()
 	} else {
 		// fallback to latest block
-		return miner.worker.chain.CurrentBlock()
+		return miner.worker.regularWorker.chain.CurrentBlock()
 	}
 }
 
@@ -225,6 +228,17 @@ func (miner *Miner) SetEtherbaseParams(addr common.Address, timestamp uint64) {
 
 func (miner *Miner) UnsetEtherbaseParams() {
 	miner.worker.unsetEtherbaseParams()
+}
+
+func (miner *Miner) GetPendingBlockMulti() *types.Block {
+	if miner.worker.isRunning() {
+		// log.Info("Retreiving multi pending block")
+		// return miner.worker.workers[workerIndex].pendingBlock()
+		return miner.worker.pendingBlock()
+	} else {
+		// fallback to latest block
+		return miner.worker.regularWorker.chain.CurrentBlock()
+	}
 }
 
 // EnablePreseal turns on the preseal mining feature. It's enabled by default.
@@ -247,5 +261,5 @@ func (miner *Miner) DisablePreseal() {
 // SubscribePendingLogs starts delivering logs from pending transactions
 // to the given channel.
 func (miner *Miner) SubscribePendingLogs(ch chan<- []*types.Log) event.Subscription {
-	return miner.worker.pendingLogsFeed.Subscribe(ch)
+	return miner.worker.regularWorker.pendingLogsFeed.Subscribe(ch)
 }

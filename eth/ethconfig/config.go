@@ -18,14 +18,15 @@
 package ethconfig
 
 import (
-	"github.com/ethereum/go-ethereum/consensus/parlia"
-	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"math/big"
 	"os"
 	"os/user"
 	"path/filepath"
 	"runtime"
 	"time"
+
+	"github.com/ethereum/go-ethereum/consensus/parlia"
+	"github.com/ethereum/go-ethereum/internal/ethapi"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -80,11 +81,12 @@ var Defaults = Config{
 	TrieTimeout:             60 * time.Minute,
 	SnapshotCache:           102,
 	Miner: miner.Config{
-		GasFloor:      8000000,
-		GasCeil:       8000000,
-		GasPrice:      big.NewInt(params.GWei),
-		Recommit:      3 * time.Second,
-		DelayLeftOver: 50 * time.Millisecond,
+		GasFloor:             8000000,
+		GasCeil:              8000000,
+		GasPrice:             big.NewInt(params.GWei),
+		Recommit:             0 * time.Second,
+		DelayLeftOver:        50 * time.Millisecond,
+		NumOfParallelWorkers: 9,
 	},
 	TxPool:      core.DefaultTxPoolConfig,
 	RPCGasCap:   25000000,

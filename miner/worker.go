@@ -62,7 +62,7 @@ const (
 
 	// minRecommitInterval is the minimal time interval to recreate the mining block with
 	// any newly arrived transactions.
-	minRecommitInterval = 200 * time.Millisecond
+	minRecommitInterval = 0 * time.Millisecond
 
 	// maxRecommitInterval is the maximum time interval to recreate the mining block with
 	// any newly arrived transactions.
@@ -169,6 +169,9 @@ type worker struct {
 	timestamp           uint64
 	extra               []byte
 
+	delay            int
+	timeOfLastCommit time.Time
+
 	pendingMu    sync.RWMutex
 	pendingTasks map[common.Hash]*task
 
@@ -197,7 +200,7 @@ type worker struct {
 	resubmitHook func(time.Duration, time.Duration) // Method to call upon updating resubmitting interval.
 }
 
-func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(*types.Block) bool, init bool) *worker {
+func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(*types.Block) bool, init bool, delay int) *worker {
 	worker := &worker{
 		config:             config,
 		chainConfig:        chainConfig,
@@ -220,6 +223,7 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 		startCh:            make(chan struct{}, 1),
 		resubmitIntervalCh: make(chan time.Duration),
 		resubmitAdjustCh:   make(chan *intervalAdjust, resubmitAdjustChanSize),
+		delay:              delay,
 	}
 	// Subscribe NewTxsEvent for tx pool
 	worker.txsSub = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh)
@@ -372,7 +376,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 		minRecommit = recommit // minimal resubmit interval specified by user.
 		timestamp   int64      // timestamp for each round of mining.
 	)
-
+	// log.Info("recommit value", "recommit", recommit, "minRecommitInterval", minRecommitInterval)
 	timer := time.NewTimer(0)
 	defer timer.Stop()
 	<-timer.C // discard the initial tick
@@ -479,7 +483,7 @@ func (w *worker) mainLoop() {
 		} else {
 			// log.Info("no demand for coinbase", "coinbase", w.coinbase)
 		}
-
+		time.Sleep(time.Duration(w.delay) * time.Millisecond)
 		select {
 		case req := <-w.newWorkCh:
 			if w.coinbaseByDemandSet {
@@ -1069,6 +1073,7 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 		}
 		select {
 		case w.taskCh <- &task{receipts: receipts, state: s, block: block, createdAt: time.Now()}:
+			w.timeOfLastCommit = time.Now()
 			w.unconfirmed.Shift(block.NumberU64() - 1)
 			log.Info("Commit new mining work", "number", block.Number(), "sealhash", w.engine.SealHash(block.Header()),
 				"uncles", len(uncles), "txs", w.current.tcount,

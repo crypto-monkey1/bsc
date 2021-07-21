@@ -459,6 +459,11 @@ func (s *Ethereum) UnsetEtherbaseParams() {
 	s.miner.UnsetEtherbaseParams()
 }
 
+// SetEtherbase sets the mining reward address.
+func (s *Ethereum) GetPendingBlockMulti() *types.Block {
+	return s.miner.GetPendingBlockMulti()
+}
+
 // StartMining starts the miner with the given number of CPU threads. If mining
 // is already running, this method adjust the number of threads allowed to use
 // and updates the minimum price required by the transaction pool.
