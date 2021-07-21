@@ -115,7 +115,7 @@ func newMultiWorker(config *Config, chainConfig *params.ChainConfig, engine cons
 
 	for i := 1; i <= config.NumOfParallelWorkers; i++ {
 		workers = append(workers,
-			newWorker(config, chainConfig, engine, eth, mux, isLocalBlock, init, int(10*i), i))
+			newWorker(config, chainConfig, engine, eth, mux, isLocalBlock, init, int(100*i), i))
 	}
 
 	log.Info("creating multi worker", "config.NumOfParallelWorkers", config.NumOfParallelWorkers, "worker", len(workers))
