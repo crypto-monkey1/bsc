@@ -27,7 +27,7 @@ func (w *multiWorker) start() {
 	for _, worker := range w.workers {
 		// log.Info("Worker started")
 		worker.start()
-		time.Sleep(150 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 
