@@ -409,7 +409,9 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 	}
 
 	for {
+		// log.Info("before delay", "worker index", w.index, "time now", time.Now().Nanosecond())
 		time.Sleep(time.Duration(w.delay) * time.Millisecond)
+		// log.Info("after delay", "worker index", w.index, "time now", time.Now().Nanosecond())
 		select {
 		case <-w.startCh:
 			clearPending(w.chain.CurrentBlock().NumberU64())

@@ -86,7 +86,7 @@ var Defaults = Config{
 		GasPrice:             big.NewInt(params.GWei),
 		Recommit:             0 * time.Second,
 		DelayLeftOver:        50 * time.Millisecond,
-		NumOfParallelWorkers: 1,
+		NumOfParallelWorkers: 2,
 	},
 	TxPool:      core.DefaultTxPoolConfig,
 	RPCGasCap:   25000000,
