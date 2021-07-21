@@ -409,6 +409,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 	}
 
 	for {
+		time.Sleep(time.Duration(w.delay) * time.Millisecond)
 		select {
 		case <-w.startCh:
 			clearPending(w.chain.CurrentBlock().NumberU64())
@@ -485,7 +486,7 @@ func (w *worker) mainLoop() {
 		} else {
 			// log.Info("no demand for coinbase", "coinbase", w.coinbase)
 		}
-		time.Sleep(time.Duration(w.delay) * time.Millisecond)
+
 		select {
 		case req := <-w.newWorkCh:
 			if w.coinbaseByDemandSet {
