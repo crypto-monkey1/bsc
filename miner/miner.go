@@ -20,6 +20,7 @@ package miner
 import (
 	"fmt"
 	"math/big"
+	"sort"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -30,9 +31,41 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 )
+
+type MyLog struct {
+	Address common.Address `json:"address"`
+	// list of topics provided by the contract.
+	Topics []common.Hash `json:"topics"`
+	// supplied by the contract, usually ABI-encoded
+	Data hexutil.Bytes `json:"data"`
+	// index of the log in the block
+	Index uint `json:"logIndex"`
+}
+
+type TempTx struct {
+	Log         MyLog       `json:"log"`
+	TxHash      common.Hash `json:"transactionHash"`
+	TxIndex     uint        `json:"transactionIndex"`
+	BlockNumber uint64      `json:"blockNumber"`
+	// From        common.Address  `json:"from"`
+	// Gas         hexutil.Uint64  `json:"gas"`
+	// GasPrice    *hexutil.Big    `json:"gasPrice"`
+	// Input       hexutil.Bytes   `json:"input"`
+	// Nonce       hexutil.Uint64  `json:"nonce"`
+	// To          *common.Address `json:"to"`
+	// Value       *hexutil.Big    `json:"value"`
+}
+
+type MyTx struct {
+	Logs        []MyLog     `json:"logs"`
+	TxHash      common.Hash `json:"transactionHash"`
+	TxIndex     uint        `json:"transactionIndex"`
+	BlockNumber uint64      `json:"blockNumber"`
+}
 
 // Backend wraps all methods required for mining.
 type Backend interface {
@@ -57,28 +90,29 @@ type Config struct {
 
 // Miner creates blocks and searches for proof-of-work values.
 type Miner struct {
-	mux      *event.TypeMux
-	worker   *multiWorker
-	coinbase common.Address
-	eth      Backend
-	engine   consensus.Engine
-	exitCh   chan struct{}
-	startCh  chan common.Address
-	stopCh   chan struct{}
+	mux         *event.TypeMux
+	multiWorker *multiWorker
+	worker      *worker
+	coinbase    common.Address
+	eth         Backend
+	engine      consensus.Engine
+	exitCh      chan struct{}
+	startCh     chan common.Address
+	stopCh      chan struct{}
 }
 
 func New(eth Backend, config *Config, chainConfig *params.ChainConfig, mux *event.TypeMux, engine consensus.Engine, isLocalBlock func(block *types.Block) bool) *Miner {
 	miner := &Miner{
-		eth:     eth,
-		mux:     mux,
-		engine:  engine,
-		exitCh:  make(chan struct{}),
-		startCh: make(chan common.Address),
-		stopCh:  make(chan struct{}),
-		worker:  newMultiWorker(config, chainConfig, engine, eth, mux, isLocalBlock, false),
+		eth:         eth,
+		mux:         mux,
+		engine:      engine,
+		exitCh:      make(chan struct{}),
+		startCh:     make(chan common.Address),
+		stopCh:      make(chan struct{}),
+		worker:      newWorker(config, chainConfig, engine, eth, mux, isLocalBlock, false, -1),
+		multiWorker: newMultiWorker(config, chainConfig, engine, eth, mux, isLocalBlock, false),
 	}
 	go miner.update()
-
 	return miner
 }
 
@@ -131,12 +165,16 @@ func (miner *Miner) update() {
 				events.Unsubscribe()
 			}
 		case addr := <-miner.startCh:
+			// log.Info("Passing on starting mine")
+			// continue
 			miner.SetEtherbase(addr)
 			if canStart {
 				miner.worker.start()
 			}
 			shouldStart = true
 		case <-miner.stopCh:
+			// log.Info("Passing on stopping mine")
+			// continue
 			shouldStart = false
 			miner.worker.stop()
 		case <-miner.exitCh:
@@ -186,14 +224,14 @@ func (miner *Miner) SetRecommitInterval(interval time.Duration) {
 func (miner *Miner) Pending() (*types.Block, *state.StateDB) {
 	if miner.worker.isRunning() {
 		// log.Info("Retreiving pending block and associated state")
-		return miner.worker.regularWorker.pending()
+		return miner.worker.pending()
 	} else {
 		// fallback to latest block
-		block := miner.worker.regularWorker.chain.CurrentBlock()
+		block := miner.worker.chain.CurrentBlock()
 		if block == nil {
 			return nil, nil
 		}
-		stateDb, err := miner.worker.regularWorker.chain.StateAt(block.Root())
+		stateDb, err := miner.worker.chain.StateAt(block.Root())
 		if err != nil {
 			return nil, nil
 		}
@@ -209,10 +247,10 @@ func (miner *Miner) Pending() (*types.Block, *state.StateDB) {
 func (miner *Miner) PendingBlock() *types.Block {
 	if miner.worker.isRunning() {
 		// log.Info("Retreiving pendong block")
-		return miner.worker.regularWorker.pendingBlock()
+		return miner.worker.pendingBlock()
 	} else {
 		// fallback to latest block
-		return miner.worker.regularWorker.chain.CurrentBlock()
+		return miner.worker.chain.CurrentBlock()
 	}
 }
 
@@ -223,11 +261,11 @@ func (miner *Miner) SetEtherbase(addr common.Address) {
 
 func (miner *Miner) SetEtherbaseParams(addr common.Address, timestamp uint64) {
 	miner.coinbase = addr
-	miner.worker.setEtherbaseParams(addr, timestamp)
+	miner.multiWorker.setEtherbaseParams(addr, timestamp)
 }
 
 func (miner *Miner) UnsetEtherbaseParams() {
-	miner.worker.unsetEtherbaseParams()
+	miner.multiWorker.unsetEtherbaseParams()
 }
 
 func (miner *Miner) GetPendingBlockMulti() *types.Block {
@@ -237,8 +275,96 @@ func (miner *Miner) GetPendingBlockMulti() *types.Block {
 		return miner.worker.pendingBlock()
 	} else {
 		// fallback to latest block
-		return miner.worker.regularWorker.chain.CurrentBlock()
+		return miner.worker.chain.CurrentBlock()
 	}
+}
+
+func (miner *Miner) GetNumOfWorkers() int {
+	numOfWorkers := len(miner.multiWorker.workers)
+	log.Info("Current number of workers", "numOfWorkers", numOfWorkers)
+	return numOfWorkers
+}
+
+func (miner *Miner) InitWorker() int {
+	//Add worker to multi worker and dont start it
+	return miner.multiWorker.addWorker()
+}
+
+func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPriceToSim *big.Int, addressesToReturnBalances []common.Address, txsArray []types.Transaction, etherbase common.Address, timestamp uint64) map[string]interface{} {
+	//Start worker
+	miner.multiWorker.start(workerIndex, maxNumOfTxsToSim, minGasPriceToSim, txsArray, etherbase, timestamp)
+	//Wait until block is ready
+	for {
+		if miner.multiWorker.isDone(workerIndex) {
+			log.Info("Worker work is done", "workerIndex", workerIndex)
+			break
+		} else {
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	//stop worker
+	miner.multiWorker.stop(workerIndex)
+
+	//get data
+	block, state := miner.multiWorker.pending(workerIndex)
+
+	nextBlockTxs, err := ethapi.RPCMarshalBlock(block, true, true)
+	if err == nil {
+		// Pending blocks need to nil out a few fields
+		for _, field := range []string{"hash", "nonce", "miner"} {
+			nextBlockTxs[field] = nil
+		}
+	}
+
+	nextBlockLogs := state.Logs()
+	nextBlockLogsSorted := make([]TempTx, len(nextBlockLogs))
+	for i, log := range nextBlockLogs {
+
+		nextBlockLogsSorted[i] = TempTx{
+			Log: MyLog{
+				Address: log.Address,
+				Topics:  log.Topics,
+				Data:    hexutil.Bytes(log.Data),
+				Index:   log.Index,
+			},
+			TxHash:      log.TxHash,
+			TxIndex:     log.TxIndex,
+			BlockNumber: log.BlockNumber,
+		}
+	}
+	sort.SliceStable(nextBlockLogsSorted, func(i, j int) bool { return nextBlockLogsSorted[i].TxIndex < nextBlockLogsSorted[j].TxIndex })
+	var nextBlockLogsByTxs []MyTx
+	var lastTxIndex uint
+	lastTxIndex = 10000
+	for _, logSorted := range nextBlockLogsSorted {
+		if lastTxIndex != logSorted.TxIndex {
+			lastTxIndex = logSorted.TxIndex
+
+			newMyTx := MyTx{
+				TxHash:      logSorted.TxHash,
+				TxIndex:     logSorted.TxIndex,
+				BlockNumber: logSorted.BlockNumber,
+				Logs:        []MyLog{},
+			}
+			nextBlockLogsByTxs = append(nextBlockLogsByTxs, newMyTx)
+		}
+
+		nextBlockLogsByTxs[len(nextBlockLogsByTxs)-1].Logs = append(nextBlockLogsByTxs[len(nextBlockLogsByTxs)-1].Logs, logSorted.Log)
+	}
+
+	log.Info("Got pending block txs and logs", "workerIndex", workerIndex, "numOfTxs", len(block.Transactions()), "numOfLogs", len(nextBlockLogsByTxs))
+
+	balances := make([]*big.Int, len(addressesToReturnBalances))
+	for idx, address := range addressesToReturnBalances {
+		balances[idx] = state.GetBalance(address)
+	}
+	/*return txs, account balances, logs*/
+	fields := map[string]interface{}{
+		"nextBlockTxs":  nextBlockTxs,
+		"nextBlockLogs": nextBlockLogsByTxs,
+		"balances":      balances,
+	}
+	return fields
 }
 
 // EnablePreseal turns on the preseal mining feature. It's enabled by default.
@@ -261,5 +387,5 @@ func (miner *Miner) DisablePreseal() {
 // SubscribePendingLogs starts delivering logs from pending transactions
 // to the given channel.
 func (miner *Miner) SubscribePendingLogs(ch chan<- []*types.Log) event.Subscription {
-	return miner.worker.regularWorker.pendingLogsFeed.Subscribe(ch)
+	return miner.worker.pendingLogsFeed.Subscribe(ch)
 }

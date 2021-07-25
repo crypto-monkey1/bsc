@@ -35,6 +35,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/trie"
@@ -159,6 +160,33 @@ func (api *PrivateMinerAPI) GetPendingBlockMulti() (map[string]interface{}, erro
 		return response, err
 	}
 	return nil, nil
+}
+
+func (api *PrivateMinerAPI) InitWorker() int {
+	return api.e.InitWorker()
+}
+
+func (api *PrivateMinerAPI) GetNumOfWorkers() int {
+	return api.e.GetNumOfWorkers()
+}
+
+func (api *PrivateMinerAPI) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPriceToSim string, addressesToReturnBalances []common.Address, inputTxs []hexutil.Bytes, timeOffset []uint64, etherbase common.Address, timestamp uint64) map[string]interface{} {
+	txsArray := make([]types.Transaction, len(inputTxs))
+	for i, input := range inputTxs {
+		if err := txsArray[i].UnmarshalBinary(input); err != nil {
+			log.Error("Couldnt unmarshal tx", "txIdx", i)
+			return nil
+		}
+		txsArray[i].SetTimeOffset(timeOffset[i])
+	}
+
+	minGasPriceToSimBigInt := new(big.Int)
+	minGasPriceToSimBigInt, ok := minGasPriceToSimBigInt.SetString(minGasPriceToSim, 10)
+	if !ok {
+		log.Error("wasnt able to convert string to big int in ExecuteWork")
+		return nil
+	}
+	return api.e.ExecuteWork(workerIndex, maxNumOfTxsToSim, minGasPriceToSimBigInt, addressesToReturnBalances, txsArray, etherbase, timestamp)
 }
 
 // SetRecommitInterval updates the interval for miner sealing work recommitting.

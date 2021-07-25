@@ -459,9 +459,20 @@ func (s *Ethereum) UnsetEtherbaseParams() {
 	s.miner.UnsetEtherbaseParams()
 }
 
-// SetEtherbase sets the mining reward address.
 func (s *Ethereum) GetPendingBlockMulti() *types.Block {
 	return s.miner.GetPendingBlockMulti()
+}
+
+func (s *Ethereum) InitWorker() int {
+	return s.miner.InitWorker()
+}
+
+func (s *Ethereum) GetNumOfWorkers() int {
+	return s.miner.GetNumOfWorkers()
+}
+
+func (s *Ethereum) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPriceToSim *big.Int, addressesToReturnBalances []common.Address, txsArray []types.Transaction, etherbase common.Address, timestamp uint64) map[string]interface{} {
+	return s.miner.ExecuteWork(workerIndex, maxNumOfTxsToSim, minGasPriceToSim, addressesToReturnBalances, txsArray, etherbase, timestamp)
 }
 
 // StartMining starts the miner with the given number of CPU threads. If mining

@@ -169,9 +169,15 @@ type worker struct {
 	timestamp           uint64
 	extra               []byte
 
-	delay            int
 	index            int
 	timeOfLastCommit time.Time
+
+	isDummyWorker    bool
+	isCustomWork     bool
+	isBlockReady     bool
+	maxNumOfTxsToSim int
+	minGasPriceToSim *big.Int
+	txsArray         []types.Transaction
 
 	pendingMu    sync.RWMutex
 	pendingTasks map[common.Hash]*task
@@ -201,7 +207,7 @@ type worker struct {
 	resubmitHook func(time.Duration, time.Duration) // Method to call upon updating resubmitting interval.
 }
 
-func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(*types.Block) bool, init bool, delay int, index int) *worker {
+func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(*types.Block) bool, init bool, index int) *worker {
 	worker := &worker{
 		config:             config,
 		chainConfig:        chainConfig,
@@ -224,7 +230,6 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 		startCh:            make(chan struct{}, 1),
 		resubmitIntervalCh: make(chan time.Duration),
 		resubmitAdjustCh:   make(chan *intervalAdjust, resubmitAdjustChanSize),
-		delay:              delay,
 		index:              index,
 	}
 	// Subscribe NewTxsEvent for tx pool
@@ -325,12 +330,34 @@ func (w *worker) pendingBlock() *types.Block {
 
 // start sets the running status as 1 and triggers new work submitting.
 func (w *worker) start() {
+	w.isCustomWork = false
+	w.isDummyWorker = true
 	atomic.StoreInt32(&w.running, 1)
 	w.startCh <- struct{}{}
 }
 
 // stop sets the running status as 0.
 func (w *worker) stop() {
+	atomic.StoreInt32(&w.running, 0)
+}
+
+func (w *worker) startMulti(maxNumOfTxsToSim int, minGasPriceToSim *big.Int, txsArray []types.Transaction, etherbase common.Address, timestamp uint64) {
+	w.isCustomWork = true
+	w.isDummyWorker = false
+	w.isBlockReady = false
+	w.maxNumOfTxsToSim = maxNumOfTxsToSim
+	w.minGasPriceToSim = minGasPriceToSim
+	w.txsArray = txsArray
+	w.coinbase = etherbase
+	w.coinbaseByDemandSet = true
+	w.timestamp = timestamp
+	atomic.StoreInt32(&w.running, 1)
+	w.startCh <- struct{}{}
+}
+
+// stop sets the running status as 0.
+func (w *worker) stopMulti() {
+	w.isBlockReady = false
 	atomic.StoreInt32(&w.running, 0)
 }
 
@@ -410,7 +437,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 
 	for {
 		// log.Info("before delay", "worker index", w.index, "time now", time.Now().Nanosecond())
-		time.Sleep(time.Duration(w.delay) * time.Millisecond)
+		// time.Sleep(time.Duration(w.delay) * time.Millisecond)
 		// log.Info("after delay", "worker index", w.index, "time now", time.Now().Nanosecond())
 		select {
 		case <-w.startCh:
@@ -482,12 +509,12 @@ func (w *worker) mainLoop() {
 	defer w.chainSideSub.Unsubscribe()
 
 	for {
-		if w.coinbaseByDemandSet {
-			w.coinbase = w.coinbaseByDemand
-			// log.Info("setting ether base in worker by demand", "coinbase", w.coinbase)
-		} else {
-			// log.Info("no demand for coinbase", "coinbase", w.coinbase)
-		}
+		// if w.coinbaseByDemandSet {
+		// 	w.coinbase = w.coinbaseByDemand
+		// 	// log.Info("setting ether base in worker by demand", "coinbase", w.coinbase)
+		// } else {
+		// 	// log.Info("no demand for coinbase", "coinbase", w.coinbase)
+		// }
 
 		select {
 		case req := <-w.newWorkCh:
@@ -498,6 +525,9 @@ func (w *worker) mainLoop() {
 			}
 
 		case ev := <-w.chainSideCh:
+			if w.isCustomWork {
+				continue
+			}
 			// Short circuit for duplicate side blocks
 			if _, ok := w.engine.(*parlia.Parlia); ok {
 				continue
@@ -540,6 +570,9 @@ func (w *worker) mainLoop() {
 			}
 
 		case ev := <-w.txsCh:
+			if w.isCustomWork {
+				continue
+			}
 			// Apply transactions to the pending state if we're not mining.
 			//
 			// Note all transactions received may not be continuous with transactions
@@ -827,6 +860,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		log.Debug("Time left for mining work", "left", (*delay - w.config.DelayLeftOver).String(), "leftover", w.config.DelayLeftOver)
 		defer stopTimer.Stop()
 	}
+	txCount := 0
 	// LOOP:
 	for {
 		// In the following three cases, we will interrupt the execution of the transaction.
@@ -867,6 +901,21 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		if tx == nil {
 			break
 		}
+
+		if w.isCustomWork {
+			if w.maxNumOfTxsToSim > 0 {
+				if txCount > w.maxNumOfTxsToSim {
+					log.Info("Got to max number of txs in pending block", "workerIndex", w.index, "txCount", txCount, "w.maxNumOfTxsToSim", w.maxNumOfTxsToSim)
+					break
+				}
+			}
+			if w.minGasPriceToSim.Cmp(big.NewInt(0)) == 1 {
+				if tx.GasPrice().Cmp(w.minGasPriceToSim) == -1 {
+					log.Info("Got to minimum gas price for pending block", "workerIndex", w.index, "tx.GasPrice()", tx.GasPrice(), "w.minGasPriceToSim", w.minGasPriceToSim)
+					break
+				}
+			}
+		}
 		// Error may be ignored here. The error has already been checked
 		// during transaction acceptance is the transaction pool.
 		//
@@ -905,6 +954,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 			coalescedLogs = append(coalescedLogs, logs...)
 			w.current.tcount++
 			txs.Shift()
+			txCount++
 
 		case errors.Is(err, core.ErrTxTypeNotSupported):
 			// Pop the unsupported transaction without shifting in the next from the account
@@ -919,7 +969,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		}
 	}
 
-	if !w.isRunning() && len(coalescedLogs) > 0 {
+	if (!w.isRunning() && len(coalescedLogs) > 0) || (w.isRunning() && w.isCustomWork) {
 		// We don't push the pendingLogsEvent while we are mining. The reason is that
 		// when we are mining, the worker will regenerate a mining block every 3 seconds.
 		// In order to avoid pushing the repeated pendingLog, we disable the pending log pushing.
@@ -934,6 +984,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		}
 		w.pendingLogsFeed.Send(cpy)
 	}
+
 	// Notify resubmit loop to decrease resubmitting interval if current interval is larger
 	// than the user-specified one.
 	if interrupt != nil {
@@ -1036,6 +1087,9 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64, 
 		log.Error("Failed to fetch pending transactions", "err", err)
 	}
 	// Short circuit if there is no available pending transactions
+	if w.isDummyWorker {
+		return
+	}
 	if len(pending) != 0 {
 		start := time.Now()
 		// Split the pending transactions into locals and remotes
@@ -1052,6 +1106,22 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64, 
 				return
 			}
 		}
+		if w.isCustomWork {
+			if len(w.txsArray) > 0 {
+				for i, _ := range w.txsArray {
+					from, _ := types.Sender(w.current.signer, &w.txsArray[i])
+					if len(remoteTxs[from]) == 0 {
+						// log.Info("added a new tx from a new address")
+						txsArray := make(types.Transactions, 0, 1)
+						txsArray = append(txsArray, &w.txsArray[i])
+						remoteTxs[from] = txsArray
+					} else {
+						// log.Info("added a new tx from a old address")
+						remoteTxs[from] = append(remoteTxs[from], &w.txsArray[i])
+					}
+				}
+			}
+		}
 		if len(remoteTxs) > 0 {
 			txs := types.NewTransactionsByPriceAndNonce(w.current.signer, remoteTxs)
 			if w.commitTransactions(txs, w.coinbase, interrupt) {
@@ -1062,6 +1132,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64, 
 		log.Info("Gas pool", "height", header.Number.String(), "pool", w.current.gasPool.String())
 	}
 	w.commit(uncles, w.fullTaskHook, true, tstart)
+	w.isBlockReady = true
 }
 
 // commit runs any post-transaction state modifications, assembles the final block
