@@ -471,8 +471,8 @@ func (s *Ethereum) GetNumOfWorkers() int {
 	return s.miner.GetNumOfWorkers()
 }
 
-func (s *Ethereum) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPriceToSim *big.Int, addressesToReturnBalances []common.Address, txsArray []types.Transaction, etherbase common.Address, timestamp uint64) map[string]interface{} {
-	return s.miner.ExecuteWork(workerIndex, maxNumOfTxsToSim, minGasPriceToSim, addressesToReturnBalances, txsArray, etherbase, timestamp)
+func (s *Ethereum) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPriceToSim *big.Int, addressesToReturnBalances []common.Address, txsArray []types.Transaction, etherbase common.Address, timestamp uint64, earliestTimeToCommit time.Time, stoppingHash common.Hash) map[string]interface{} {
+	return s.miner.ExecuteWork(workerIndex, maxNumOfTxsToSim, minGasPriceToSim, addressesToReturnBalances, txsArray, etherbase, timestamp, earliestTimeToCommit, stoppingHash)
 }
 
 // StartMining starts the miner with the given number of CPU threads. If mining

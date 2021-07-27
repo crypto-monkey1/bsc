@@ -2612,7 +2612,7 @@ func (s *PublicTransactionPoolAPI) SendRawTransaction(ctx context.Context, input
 
 // SendRawTransaction will add the signed transaction to the transaction pool.
 // The sender is responsible for signing the transaction and using the correct nonce.
-func (s *PublicTransactionPoolAPI) SendRawTransactionForSim(ctx context.Context, input hexutil.Bytes, timeOffset uint64) (common.Hash, error) {
+func (s *PublicTransactionPoolAPI) SendRawTransactionForSim(ctx context.Context, input hexutil.Bytes, timeOffset int64) (common.Hash, error) {
 	tx := new(types.Transaction)
 	if err := tx.UnmarshalBinary(input); err != nil {
 		return common.Hash{}, err

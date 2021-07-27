@@ -191,7 +191,7 @@ func (tx *Transaction) setDecoded(inner TxData, size int) {
 	}
 }
 
-func (tx *Transaction) SetTimeOffset(offset uint64) {
+func (tx *Transaction) SetTimeOffset(offset int64) {
 	// log.Info("Time of tx before", "time", tx.time, "offset", offset)
 	tx.time = tx.time.Add(time.Duration(offset) * 1e9)
 	// log.Info("Time of tx after", "time", tx.time, "offset", offset)
@@ -271,6 +271,8 @@ func (tx *Transaction) Value() *big.Int { return new(big.Int).Set(tx.inner.value
 
 // Nonce returns the sender account nonce of the transaction.
 func (tx *Transaction) Nonce() uint64 { return tx.inner.nonce() }
+
+func (tx *Transaction) TimeSeen() time.Time { return tx.time }
 
 // To returns the recipient address of the transaction.
 // For contract-creation transactions, To returns nil.
@@ -438,6 +440,38 @@ func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transa
 	// Initialize a price and received time based heap with the head transactions
 	heads := make(TxByPriceAndTime, 0, len(txs))
 	for from, accTxs := range txs {
+		// Ensure the sender address is from the signer
+		if acc, _ := Sender(signer, accTxs[0]); acc != from {
+			delete(txs, from)
+			continue
+		}
+		heads = append(heads, accTxs[0])
+		txs[from] = accTxs[1:]
+	}
+	heap.Init(&heads)
+
+	// Assemble and return the transaction set
+	return &TransactionsByPriceAndNonce{
+		txs:    txs,
+		heads:  heads,
+		signer: signer,
+	}
+}
+
+func NewTransactionsByPriceAndNonceWithTimeLimit(signer Signer, txs map[common.Address]Transactions, timeLimit time.Time) *TransactionsByPriceAndNonce {
+	// Initialize a price and received time based heap with the head transactions
+	heads := make(TxByPriceAndTime, 0, len(txs))
+	for from, accTxs := range txs {
+		passed := false
+		for i, _ := range accTxs {
+			if accTxs[i].TimeSeen().After(timeLimit) {
+				passed = true
+			}
+		}
+		if !passed {
+			delete(txs, from)
+			continue
+		}
 		// Ensure the sender address is from the signer
 		if acc, _ := Sender(signer, accTxs[0]); acc != from {
 			delete(txs, from)

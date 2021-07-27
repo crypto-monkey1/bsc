@@ -290,9 +290,9 @@ func (miner *Miner) InitWorker() int {
 	return miner.multiWorker.addWorker()
 }
 
-func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPriceToSim *big.Int, addressesToReturnBalances []common.Address, txsArray []types.Transaction, etherbase common.Address, timestamp uint64) map[string]interface{} {
+func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPriceToSim *big.Int, addressesToReturnBalances []common.Address, txsArray []types.Transaction, etherbase common.Address, timestamp uint64, earliestTimeToCommit time.Time, stoppingHash common.Hash) map[string]interface{} {
 	//Start worker
-	miner.multiWorker.start(workerIndex, maxNumOfTxsToSim, minGasPriceToSim, txsArray, etherbase, timestamp)
+	miner.multiWorker.start(workerIndex, maxNumOfTxsToSim, minGasPriceToSim, txsArray, etherbase, timestamp, earliestTimeToCommit, stoppingHash)
 	//Wait until block is ready
 	for {
 		if miner.multiWorker.isDone(workerIndex) {

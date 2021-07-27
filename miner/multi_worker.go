@@ -2,6 +2,7 @@ package miner
 
 import (
 	"math/big"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -33,15 +34,15 @@ func (w *multiWorker) stop(workerIndex int) {
 	w.workers[workerIndex].stopMulti()
 }
 
-func (w *multiWorker) start(workerIndex int, maxNumOfTxsToSim int, minGasPriceToSim *big.Int, txsArray []types.Transaction, etherbase common.Address, timestamp uint64) {
+func (w *multiWorker) start(workerIndex int, maxNumOfTxsToSim int, minGasPriceToSim *big.Int, txsArray []types.Transaction, etherbase common.Address, timestamp uint64, earliestTimeToCommit time.Time, stoppingHash common.Hash) {
 	// log.Info("Starting multi workers")
 	// for _, worker := range w.workers {
 	// 	// log.Info("Worker started")
 	// 	worker.start()
 	// 	time.Sleep(50 * time.Millisecond)
 	// }
-	log.Info("Starting worker", "workerIndex", workerIndex, "maxNumOfTxsToSim", maxNumOfTxsToSim, "minGasPriceToSim", minGasPriceToSim, "numOfTxsToSim", len(txsArray))
-	w.workers[workerIndex].startMulti(maxNumOfTxsToSim, minGasPriceToSim, txsArray, etherbase, timestamp)
+	log.Info("Starting worker", "workerIndex", workerIndex, "maxNumOfTxsToSim", maxNumOfTxsToSim, "minGasPriceToSim", minGasPriceToSim, "numOfTxsToSim", len(txsArray), "earliestTimeToCommit", earliestTimeToCommit, "stoppingHash", stoppingHash)
+	w.workers[workerIndex].startMulti(maxNumOfTxsToSim, minGasPriceToSim, txsArray, etherbase, timestamp, earliestTimeToCommit, stoppingHash)
 }
 
 func (w *multiWorker) isDone(workerIndex int) bool {

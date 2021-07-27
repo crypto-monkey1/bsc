@@ -172,12 +172,14 @@ type worker struct {
 	index            int
 	timeOfLastCommit time.Time
 
-	isDummyWorker    bool
-	isCustomWork     bool
-	isBlockReady     bool
-	maxNumOfTxsToSim int
-	minGasPriceToSim *big.Int
-	txsArray         []types.Transaction
+	isDummyWorker        bool
+	isCustomWork         bool
+	isBlockReady         bool
+	maxNumOfTxsToSim     int
+	minGasPriceToSim     *big.Int
+	earliestTimeToCommit time.Time
+	stoppingHash         common.Hash
+	txsArray             []types.Transaction
 
 	pendingMu    sync.RWMutex
 	pendingTasks map[common.Hash]*task
@@ -341,12 +343,14 @@ func (w *worker) stop() {
 	atomic.StoreInt32(&w.running, 0)
 }
 
-func (w *worker) startMulti(maxNumOfTxsToSim int, minGasPriceToSim *big.Int, txsArray []types.Transaction, etherbase common.Address, timestamp uint64) {
+func (w *worker) startMulti(maxNumOfTxsToSim int, minGasPriceToSim *big.Int, txsArray []types.Transaction, etherbase common.Address, timestamp uint64, earliestTimeToCommit time.Time, stoppingHash common.Hash) {
 	w.isCustomWork = true
 	w.isDummyWorker = false
 	w.isBlockReady = false
 	w.maxNumOfTxsToSim = maxNumOfTxsToSim
 	w.minGasPriceToSim = minGasPriceToSim
+	w.earliestTimeToCommit = earliestTimeToCommit
+	w.stoppingHash = stoppingHash
 	w.txsArray = txsArray
 	w.coinbase = etherbase
 	w.coinbaseByDemandSet = true
@@ -861,6 +865,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		defer stopTimer.Stop()
 	}
 	txCount := 0
+	stopCommit := false
 	// LOOP:
 	for {
 		// In the following three cases, we will interrupt the execution of the transaction.
@@ -901,6 +906,9 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		if tx == nil {
 			break
 		}
+		if stopCommit {
+			break
+		}
 
 		if w.isCustomWork {
 			if w.maxNumOfTxsToSim > 0 {
@@ -914,6 +922,10 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 					log.Info("Got to minimum gas price for pending block", "workerIndex", w.index, "tx.GasPrice()", tx.GasPrice(), "w.minGasPriceToSim", w.minGasPriceToSim)
 					break
 				}
+			}
+			if w.stoppingHash == tx.Hash() {
+				log.Info("Got stopping hash tx", "workerIndex", w.index, "tx.Hash()", tx.Hash())
+				stopCommit = true
 			}
 		}
 		// Error may be ignored here. The error has already been checked
@@ -1122,8 +1134,14 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64, 
 				}
 			}
 		}
-		if len(remoteTxs) > 0 {
+		if len(remoteTxs) > 0 && !w.isCustomWork {
 			txs := types.NewTransactionsByPriceAndNonce(w.current.signer, remoteTxs)
+			if w.commitTransactions(txs, w.coinbase, interrupt) {
+				return
+			}
+		}
+		if len(remoteTxs) > 0 && w.isCustomWork {
+			txs := types.NewTransactionsByPriceAndNonceWithTimeLimit(w.current.signer, remoteTxs, w.earliestTimeToCommit)
 			if w.commitTransactions(txs, w.coinbase, interrupt) {
 				return
 			}
