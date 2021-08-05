@@ -49,6 +49,10 @@ func (w *multiWorker) isDone(workerIndex int) bool {
 	return w.workers[workerIndex].isBlockReady
 }
 
+func (w *multiWorker) pendingReceipts(workerIndex int) []*types.Receipt {
+	return w.workers[workerIndex].pendingReceipts()
+}
+
 func (w *multiWorker) pending(workerIndex int) (*types.Block, *state.StateDB) {
 	return w.workers[workerIndex].pending()
 }

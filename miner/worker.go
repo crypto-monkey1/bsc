@@ -322,6 +322,10 @@ func (w *worker) pending() (*types.Block, *state.StateDB) {
 	return w.snapshotBlock, w.snapshotState.Copy()
 }
 
+func (w *worker) pendingReceipts() []*types.Receipt {
+	return w.current.receipts
+}
+
 // pendingBlock returns pending block.
 func (w *worker) pendingBlock() *types.Block {
 	// return a snapshot to avoid contention on currentMu mutex
