@@ -305,6 +305,9 @@ func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPri
 	//stop worker
 	miner.multiWorker.stop(workerIndex)
 
+	//get receipts
+	nextBlockReceipts := miner.multiWorker.pendingReceipts(workerIndex)
+
 	//get data
 	block, state := miner.multiWorker.pending(workerIndex)
 
@@ -360,9 +363,10 @@ func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPri
 	}
 	/*return txs, account balances, logs*/
 	fields := map[string]interface{}{
-		"nextBlockTxs":  nextBlockTxs,
-		"nextBlockLogs": nextBlockLogsByTxs,
-		"balances":      balances,
+		"nextBlockTxs":      nextBlockTxs,
+		"nextBlockLogs":     nextBlockLogsByTxs,
+		"nextBlockReceipts": nextBlockReceipts,
+		"balances":          balances,
 	}
 	return fields
 }
