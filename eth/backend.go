@@ -138,7 +138,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	}
 	log.Info("Initialised chain configuration", "config", chainConfig)
 
-	if err := pruner.RecoverPruning(stack.ResolvePath(""), chainDb, stack.ResolvePath(config.TrieCleanCacheJournal)); err != nil {
+	if err := pruner.RecoverPruning(stack.ResolvePath(""), chainDb, stack.ResolvePath(config.TrieCleanCacheJournal), config.TriesInMemory); err != nil {
 		log.Error("Failed to recover state", "error", err)
 	}
 	eth := &Ethereum{
@@ -186,15 +186,15 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			EVMInterpreter:          config.EVMInterpreter,
 		}
 		cacheConfig = &core.CacheConfig{
-			TrieCleanLimit:      config.TrieCleanCache,
-			TrieCleanJournal:    stack.ResolvePath(config.TrieCleanCacheJournal),
-			TrieCleanRejournal:  config.TrieCleanCacheRejournal,
-			TrieCleanNoPrefetch: config.NoPrefetch,
-			TrieDirtyLimit:      config.TrieDirtyCache,
-			TrieDirtyDisabled:   config.NoPruning,
-			TrieTimeLimit:       config.TrieTimeout,
-			SnapshotLimit:       config.SnapshotCache,
-			Preimages:           config.Preimages,
+			TrieCleanLimit:     config.TrieCleanCache,
+			TrieCleanJournal:   stack.ResolvePath(config.TrieCleanCacheJournal),
+			TrieCleanRejournal: config.TrieCleanCacheRejournal,
+			TrieDirtyLimit:     config.TrieDirtyCache,
+			TrieDirtyDisabled:  config.NoPruning,
+			TrieTimeLimit:      config.TrieTimeout,
+			SnapshotLimit:      config.SnapshotCache,
+			TriesInMemory:      config.TriesInMemory,
+			Preimages:          config.Preimages,
 		}
 	)
 	eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, chainConfig, eth.engine, vmConfig, eth.shouldPreserve, &config.TxLookupLimit)
@@ -603,6 +603,9 @@ func (s *Ethereum) Stop() error {
 	close(s.closeBloomHandler)
 	s.txPool.Stop()
 	s.miner.Stop()
+	s.miner.Close()
+	// TODO this is a hotfix for https://github.com/ethereum/go-ethereum/issues/22892, need a better solution
+	time.Sleep(5 * time.Second)
 	s.blockchain.Stop()
 	s.engine.Close()
 	rawdb.PopUncleanShutdownMarker(s.chainDb)
