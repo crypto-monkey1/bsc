@@ -19,7 +19,9 @@ package core
 import (
 	"fmt"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -148,6 +150,13 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	// If the transaction created a contract, store the creation address in the receipt.
 	if msg.To() == nil {
 		receipt.ContractAddress = crypto.CreateAddress(evm.TxContext.Origin, tx.Nonce())
+	}
+
+	if result.Revert() != nil {
+		reason, _ := abi.UnpackRevert(result.Revert())
+		receipt.RevertReason = reason
+	} else {
+		receipt.ReturnedData = hexutil.Encode(result.Return())
 	}
 
 	// Set the receipt logs and create the bloom filter.
