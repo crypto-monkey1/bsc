@@ -307,6 +307,8 @@ func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPri
 	//stop worker
 	miner.multiWorker.stop(workerIndex)
 
+	timeOfSim := miner.multiWorker.getTimeOfSim(workerIndex)
+
 	//get receipts
 	nextBlockReceipts := miner.multiWorker.pendingReceipts(workerIndex)
 
@@ -369,6 +371,7 @@ func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPri
 		"nextBlockLogs":     nextBlockLogsByTxs,
 		"nextBlockReceipts": nextBlockReceipts,
 		"balances":          balances,
+		"timeOfSim":         timeOfSim,
 	}
 	return fields
 }

@@ -53,6 +53,10 @@ func (w *multiWorker) pendingReceipts(workerIndex int) []*types.Receipt {
 	return w.workers[workerIndex].pendingReceipts()
 }
 
+func (w *multiWorker) getTimeOfSim(workerIndex int) time.Duration {
+	return w.workers[workerIndex].timeOfSim
+}
+
 func (w *multiWorker) pending(workerIndex int) (*types.Block, *state.StateDB) {
 	return w.workers[workerIndex].pending()
 }

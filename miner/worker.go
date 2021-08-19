@@ -180,6 +180,7 @@ type worker struct {
 	earliestTimeToCommit time.Time
 	stoppingHash         common.Hash
 	txsArray             []types.Transaction
+	timeOfSim            time.Duration
 
 	pendingMu    sync.RWMutex
 	pendingTasks map[common.Hash]*task
@@ -1146,7 +1147,7 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 				"uncles", len(uncles), "txs", w.current.tcount,
 				"gas", block.GasUsed(),
 				"elapsed", common.PrettyDuration(time.Since(start)))
-
+			w.timeOfSim = time.Since(start)
 		case <-w.exitCh:
 			log.Info("Worker has exited")
 		}
