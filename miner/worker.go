@@ -341,6 +341,12 @@ func (w *worker) start() {
 	w.isDummyWorker = true
 	atomic.StoreInt32(&w.running, 1)
 	w.startCh <- struct{}{}
+
+	if w.current != nil && w.current.state != nil {
+		w.current.state.StopPrefetcher()
+	}
+	atomic.StoreInt32(&w.running, 0)
+	close(w.exitCh)
 }
 
 // stop sets the running status as 0.
