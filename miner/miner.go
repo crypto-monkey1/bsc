@@ -293,6 +293,7 @@ func (miner *Miner) InitWorker() int {
 }
 
 func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPriceToSim *big.Int, addressesToReturnBalances []common.Address, txsArray []types.Transaction, etherbase common.Address, timestamp uint64, earliestTimeToCommit time.Time, stoppingHash common.Hash) map[string]interface{} {
+	tstartAllTime := time.Now()
 	//Start worker
 	miner.multiWorker.start(workerIndex, maxNumOfTxsToSim, minGasPriceToSim, txsArray, etherbase, timestamp, earliestTimeToCommit, stoppingHash)
 	//Wait until block is ready
@@ -309,6 +310,7 @@ func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPri
 
 	timeOfSim := miner.multiWorker.getTimeOfSim(workerIndex)
 
+	tstartDataCollection := time.Now()
 	//get receipts
 	nextBlockReceipts := miner.multiWorker.pendingReceipts(workerIndex)
 
@@ -365,13 +367,16 @@ func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPri
 	for idx, address := range addressesToReturnBalances {
 		balances[idx] = state.GetBalance(address)
 	}
+
 	/*return txs, account balances, logs*/
 	fields := map[string]interface{}{
-		"nextBlockTxs":      nextBlockTxs,
-		"nextBlockLogs":     nextBlockLogsByTxs,
-		"nextBlockReceipts": nextBlockReceipts,
-		"balances":          balances,
-		"timeOfSim":         timeOfSim,
+		"nextBlockTxs":       nextBlockTxs,
+		"nextBlockLogs":      nextBlockLogsByTxs,
+		"nextBlockReceipts":  nextBlockReceipts,
+		"balances":           balances,
+		"timeOfSim":          timeOfSim,
+		"timeCollectingData": time.Since(tstartDataCollection),
+		"allTime":            time.Since(tstartAllTime),
 	}
 	return fields
 }
