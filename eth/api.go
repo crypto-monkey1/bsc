@@ -171,6 +171,7 @@ func (api *PrivateMinerAPI) GetNumOfWorkers() int {
 }
 
 func (api *PrivateMinerAPI) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPriceToSim string, addressesToReturnBalances []common.Address, inputTxs []hexutil.Bytes, timeOffset []int64, etherbase common.Address, timestamp uint64, earliestTimeToCommit int64, stoppingHash common.Hash) map[string]interface{} {
+	tstartAllTime := time.Now()
 	txsArray := make([]types.Transaction, len(inputTxs))
 	for i, input := range inputTxs {
 		if err := txsArray[i].UnmarshalBinary(input); err != nil {
@@ -186,7 +187,7 @@ func (api *PrivateMinerAPI) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, m
 		log.Error("wasnt able to convert string to big int in ExecuteWork")
 		return nil
 	}
-	return api.e.ExecuteWork(workerIndex, maxNumOfTxsToSim, minGasPriceToSimBigInt, addressesToReturnBalances, txsArray, etherbase, timestamp, time.Unix(0, earliestTimeToCommit*1e6), stoppingHash)
+	return api.e.ExecuteWork(workerIndex, maxNumOfTxsToSim, minGasPriceToSimBigInt, addressesToReturnBalances, txsArray, etherbase, timestamp, time.Unix(0, earliestTimeToCommit*1e6), stoppingHash, tstartAllTime)
 }
 
 // SetRecommitInterval updates the interval for miner sealing work recommitting.
