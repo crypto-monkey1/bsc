@@ -311,7 +311,7 @@ func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPri
 
 	tstartDataCollection := time.Now()
 	//get receipts
-	// nextBlockReceipts := miner.multiWorker.pendingReceipts(workerIndex)
+	nextBlockReceipts := miner.multiWorker.pendingReceipts(workerIndex)
 
 	//get data
 	block, state := miner.multiWorker.pending(workerIndex)
@@ -379,8 +379,8 @@ func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPri
 	// }
 	fields := map[string]interface{}{
 		// "nextBlockTxs":  nextBlockTxs,
-		"nextBlockLogs": nextBlockLogsByTxs,
-		// "nextBlockReceipts":  nextBlockReceipts,
+		// "nextBlockLogs": nextBlockLogsByTxs,
+		"nextBlockReceipts":  nextBlockReceipts,
 		"balances":           balances,
 		"timeOfSim":          timeOfSim,
 		"timeCollectingData": time.Since(tstartDataCollection),
