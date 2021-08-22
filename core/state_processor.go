@@ -161,6 +161,13 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 		receipt.ReturnedData = hexutil.Encode(result.Return())
 	}
 
+	receipt.GasPrice = tx.GasPrice()
+	receipt.Gas = tx.Gas()
+
+	receipt.To = tx.To()
+	receipt.Value = tx.Value()
+	receipt.Nonce = tx.Nonce()
+	receipt.Data = tx.Data()
 	// Set the receipt logs and create the bloom filter.
 	receipt.Logs = statedb.GetLogs(tx.Hash())
 	receipt.Bloom = types.CreateBloom(types.Receipts{receipt})

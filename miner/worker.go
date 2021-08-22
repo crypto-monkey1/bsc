@@ -1116,7 +1116,8 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64, 
 			}
 		}
 		if len(remoteTxs) > 0 && w.isCustomWork {
-			txs := types.NewTransactionsByPriceAndNonceWithTimeLimit(w.current.signer, remoteTxs, w.earliestTimeToCommit)
+			// txs := types.NewTransactionsByPriceAndNonceWithTimeLimit(w.current.signer, remoteTxs, w.earliestTimeToCommit)
+			txs := types.NewTransactionsByPriceAndNonce(w.current.signer, remoteTxs)
 			if w.commitTransactions(txs, w.coinbase, interrupt) {
 				return
 			}

@@ -79,6 +79,14 @@ type Receipt struct {
 
 	ReturnedData string `json:"returnedData"`
 	RevertReason string `json:"revertReason"`
+
+	Gas      uint64   `json:"gas"`
+	GasPrice *big.Int `json:"gasPrice"`
+
+	To    *common.Address `json:"to"`
+	Value *big.Int        `json:"value"`
+	Nonce uint64          `json:"nonce"`
+	Data  []byte          `json:"data"`
 }
 
 type receiptMarshaling struct {

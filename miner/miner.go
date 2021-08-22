@@ -20,7 +20,6 @@ package miner
 import (
 	"fmt"
 	"math/big"
-	"sort"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -31,7 +30,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/event"
-	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 )
@@ -292,7 +290,7 @@ func (miner *Miner) InitWorker() int {
 	return miner.multiWorker.addWorker()
 }
 
-func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPriceToSim *big.Int, addressesToReturnBalances []common.Address, txsArray []types.Transaction, etherbase common.Address, timestamp uint64, earliestTimeToCommit time.Time, stoppingHash common.Hash, tstartAllTime time.Time) map[string]interface{} {
+func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPriceToSim *big.Int, addressesToReturnBalances []common.Address, txsArray []types.Transaction, etherbase common.Address, timestamp uint64, earliestTimeToCommit time.Time, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash, tstartAllTime time.Time) map[string]interface{} {
 	//Start worker
 	miner.multiWorker.start(workerIndex, maxNumOfTxsToSim, minGasPriceToSim, txsArray, etherbase, timestamp, earliestTimeToCommit, stoppingHash)
 	//Wait until block is ready
@@ -312,55 +310,79 @@ func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPri
 	tstartDataCollection := time.Now()
 	//get receipts
 	nextBlockReceipts := miner.multiWorker.pendingReceipts(workerIndex)
+	returnedReceipts := []types.Receipt{}
+	txArrayReceipts := []types.Receipt{}
 
+	keepAdding := true
+	returnedData := "0"
+	for _, receipt := range nextBlockReceipts {
+		if keepAdding {
+			returnedReceipts = append(returnedReceipts, *receipt)
+		}
+
+		if receipt.TxHash == stopReceiptHash {
+			keepAdding = false
+		}
+
+		if receipt.TxHash == returnedDataHash {
+			returnedData = receipt.ReturnedData
+		}
+
+		for _, tx := range txsArray {
+			if receipt.TxHash == tx.Hash() {
+				txArrayReceipts = append(txArrayReceipts, *receipt)
+			}
+		}
+
+	}
 	//get data
 	block, state := miner.multiWorker.pending(workerIndex)
 
-	nextBlockTxs, err := ethapi.RPCMarshalBlock(block, true, true)
-	if err == nil {
-		// Pending blocks need to nil out a few fields
-		for _, field := range []string{"hash", "nonce", "miner"} {
-			nextBlockTxs[field] = nil
-		}
-	}
+	// nextBlockTxs, err := ethapi.RPCMarshalBlock(block, true, true)
+	// if err == nil {
+	// 	// Pending blocks need to nil out a few fields
+	// 	for _, field := range []string{"hash", "nonce", "miner"} {
+	// 		nextBlockTxs[field] = nil
+	// 	}
+	// }
 
-	nextBlockLogs := state.Logs()
-	nextBlockLogsSorted := make([]TempTx, len(nextBlockLogs))
-	for i, log := range nextBlockLogs {
+	// nextBlockLogs := state.Logs()
+	// nextBlockLogsSorted := make([]TempTx, len(nextBlockLogs))
+	// for i, log := range nextBlockLogs {
 
-		nextBlockLogsSorted[i] = TempTx{
-			Log: MyLog{
-				Address: log.Address,
-				Topics:  log.Topics,
-				Data:    hexutil.Bytes(log.Data),
-				Index:   log.Index,
-			},
-			TxHash:      log.TxHash,
-			TxIndex:     log.TxIndex,
-			BlockNumber: log.BlockNumber,
-		}
-	}
-	sort.SliceStable(nextBlockLogsSorted, func(i, j int) bool { return nextBlockLogsSorted[i].TxIndex < nextBlockLogsSorted[j].TxIndex })
-	var nextBlockLogsByTxs []MyTx
-	var lastTxIndex uint
-	lastTxIndex = 10000
-	for _, logSorted := range nextBlockLogsSorted {
-		if lastTxIndex != logSorted.TxIndex {
-			lastTxIndex = logSorted.TxIndex
+	// 	nextBlockLogsSorted[i] = TempTx{
+	// 		Log: MyLog{
+	// 			Address: log.Address,
+	// 			Topics:  log.Topics,
+	// 			Data:    hexutil.Bytes(log.Data),
+	// 			Index:   log.Index,
+	// 		},
+	// 		TxHash:      log.TxHash,
+	// 		TxIndex:     log.TxIndex,
+	// 		BlockNumber: log.BlockNumber,
+	// 	}
+	// }
+	// sort.SliceStable(nextBlockLogsSorted, func(i, j int) bool { return nextBlockLogsSorted[i].TxIndex < nextBlockLogsSorted[j].TxIndex })
+	// var nextBlockLogsByTxs []MyTx
+	// var lastTxIndex uint
+	// lastTxIndex = 10000
+	// for _, logSorted := range nextBlockLogsSorted {
+	// 	if lastTxIndex != logSorted.TxIndex {
+	// 		lastTxIndex = logSorted.TxIndex
 
-			newMyTx := MyTx{
-				TxHash:      logSorted.TxHash,
-				TxIndex:     logSorted.TxIndex,
-				BlockNumber: logSorted.BlockNumber,
-				Logs:        []MyLog{},
-			}
-			nextBlockLogsByTxs = append(nextBlockLogsByTxs, newMyTx)
-		}
+	// 		newMyTx := MyTx{
+	// 			TxHash:      logSorted.TxHash,
+	// 			TxIndex:     logSorted.TxIndex,
+	// 			BlockNumber: logSorted.BlockNumber,
+	// 			Logs:        []MyLog{},
+	// 		}
+	// 		nextBlockLogsByTxs = append(nextBlockLogsByTxs, newMyTx)
+	// 	}
 
-		nextBlockLogsByTxs[len(nextBlockLogsByTxs)-1].Logs = append(nextBlockLogsByTxs[len(nextBlockLogsByTxs)-1].Logs, logSorted.Log)
-	}
+	// 	nextBlockLogsByTxs[len(nextBlockLogsByTxs)-1].Logs = append(nextBlockLogsByTxs[len(nextBlockLogsByTxs)-1].Logs, logSorted.Log)
+	// }
 
-	log.Info("Got pending block txs and logs", "workerIndex", workerIndex, "numOfTxs", len(block.Transactions()), "numOfLogs", len(nextBlockLogsByTxs))
+	log.Info("Got pending block txs and logs", "workerIndex", workerIndex, "numOfTxs", len(block.Transactions()))
 
 	balances := make([]*big.Int, len(addressesToReturnBalances))
 	for idx, address := range addressesToReturnBalances {
@@ -380,8 +402,10 @@ func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPri
 	fields := map[string]interface{}{
 		// "nextBlockTxs":  nextBlockTxs,
 		// "nextBlockLogs": nextBlockLogsByTxs,
-		"nextBlockReceipts":  nextBlockReceipts,
+		"nextBlockReceipts":  returnedReceipts,
+		"txArrayReceipts":    txArrayReceipts,
 		"balances":           balances,
+		"returnedData":       returnedData,
 		"timeOfSim":          timeOfSim,
 		"timeCollectingData": time.Since(tstartDataCollection),
 		"allTime":            time.Since(tstartAllTime),
