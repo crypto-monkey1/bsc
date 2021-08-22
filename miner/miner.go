@@ -378,7 +378,7 @@ func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPri
 	// 	"allTime":            time.Since(tstartAllTime),
 	// }
 	fields := map[string]interface{}{
-		"nextBlockTxs":  nextBlockTxs,
+		// "nextBlockTxs":  nextBlockTxs,
 		"nextBlockLogs": nextBlockLogsByTxs,
 		// "nextBlockReceipts":  nextBlockReceipts,
 		"balances":           balances,
