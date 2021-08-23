@@ -939,6 +939,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 	// }
 	txCount := 0
 	stopCommit := false
+	log.Info("Before commiting txs loop", "workerIdx", w.index)
 	// LOOP:
 	for {
 		// In the following three cases, we will interrupt the execution of the transaction.
