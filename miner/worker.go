@@ -421,7 +421,15 @@ func (w *worker) startMulti(maxNumOfTxsToSim int, minGasPriceToSim *big.Int, txs
 
 	log.Info("Before commiting new work", "workerIndex", w.index)
 
+	atomic.StoreInt32(&w.running, 1)
+
+	if w.current != nil && w.current.state != nil {
+		w.current.state.StopPrefetcher()
+	}
+
 	w.commitNewWork(nil, true, time.Now().Unix())
+
+	atomic.StoreInt32(&w.running, 0)
 	// atomic.StoreInt32(&w.running, 1)
 	// w.startCh <- struct{}{}
 }
