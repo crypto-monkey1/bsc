@@ -919,6 +919,7 @@ func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Addres
 }
 
 func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coinbase common.Address, interrupt *int32) bool {
+	startTime := time.Now()
 	// Short circuit if current is nil
 	if w.current == nil {
 		return true
@@ -1018,6 +1019,10 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		w.current.state.Prepare(tx.Hash(), common.Hash{}, w.current.tcount)
 		log.Info("Before commmiting tx", "workerIndex", w.index, "from", from, "tx.Hash()", tx.Hash())
 		logs, err := w.commitTransaction(tx, coinbase)
+		if time.Since(startTime) > 1e9 {
+			log.Info("Too much time has passed", "workerIndex", w.index, "time", time.Since(startTime), "from", from, "tx.Hash()", tx.Hash())
+			return true
+		}
 		log.Info("After commmiting tx", "workerIndex", w.index, "from", from, "tx.Hash()", tx.Hash())
 		switch {
 		case errors.Is(err, core.ErrGasLimitReached):
