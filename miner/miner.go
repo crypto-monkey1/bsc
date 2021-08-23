@@ -294,16 +294,16 @@ func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPri
 	//Start worker
 	miner.multiWorker.start(workerIndex, maxNumOfTxsToSim, minGasPriceToSim, txsArray, etherbase, timestamp, blockNumberToSimBigInt, earliestTimeToCommit, stoppingHash)
 	//Wait until block is ready
-	for {
-		if miner.multiWorker.isDone(workerIndex) {
-			log.Info("Worker work is done", "workerIndex", workerIndex)
-			break
-		} else {
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
+	// for {
+	// 	if miner.multiWorker.isDone(workerIndex) {
+	// 		log.Info("Worker work is done", "workerIndex", workerIndex)
+	// 		break
+	// 	} else {
+	// 		time.Sleep(10 * time.Millisecond)
+	// 	}
+	// }
 	//stop worker
-	miner.multiWorker.stop(workerIndex)
+	// miner.multiWorker.stop(workerIndex)
 
 	timeOfSim := miner.multiWorker.getTimeOfSim(workerIndex)
 

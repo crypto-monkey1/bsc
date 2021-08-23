@@ -169,7 +169,7 @@ func newMultiWorker(config *Config, chainConfig *params.ChainConfig, engine cons
 
 func (w *multiWorker) addWorker() int {
 	w.workers = append(w.workers,
-		newWorker(w.config, w.chainConfig, w.engine, w.eth, w.mux, w.isLocalBlock, false, len(w.workers)))
+		newWorkerCustom(w.config, w.chainConfig, w.engine, w.eth, w.mux, w.isLocalBlock, false, len(w.workers)))
 	log.Info("Added a worker", "workerIndex", len(w.workers)-1, "w.config.Etherbase", w.config.Etherbase)
 	w.workers[len(w.workers)-1].setEtherbase(w.config.Etherbase)
 	return len(w.workers) - 1

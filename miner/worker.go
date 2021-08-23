@@ -261,6 +261,56 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 	return worker
 }
 
+func newWorkerCustom(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(*types.Block) bool, init bool, index int) *worker {
+	worker := &worker{
+		config:             config,
+		chainConfig:        chainConfig,
+		engine:             engine,
+		eth:                eth,
+		mux:                mux,
+		chain:              eth.BlockChain(),
+		isLocalBlock:       isLocalBlock,
+		localUncles:        make(map[common.Hash]*types.Block),
+		remoteUncles:       make(map[common.Hash]*types.Block),
+		unconfirmed:        newUnconfirmedBlocks(eth.BlockChain(), miningLogAtDepth),
+		pendingTasks:       make(map[common.Hash]*task),
+		txsCh:              make(chan core.NewTxsEvent, txChanSize),
+		chainHeadCh:        make(chan core.ChainHeadEvent, chainHeadChanSize),
+		chainSideCh:        make(chan core.ChainSideEvent, chainSideChanSize),
+		newWorkCh:          make(chan *newWorkReq),
+		taskCh:             make(chan *task),
+		resultCh:           make(chan *types.Block, resultQueueSize),
+		exitCh:             make(chan struct{}),
+		startCh:            make(chan struct{}, 1),
+		resubmitIntervalCh: make(chan time.Duration),
+		resubmitAdjustCh:   make(chan *intervalAdjust, resubmitAdjustChanSize),
+		index:              index,
+	}
+	// Subscribe NewTxsEvent for tx pool
+	// worker.txsSub = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh)
+	// Subscribe events for blockchain
+	// worker.chainHeadSub = eth.BlockChain().SubscribeChainHeadEvent(worker.chainHeadCh)
+	// worker.chainSideSub = eth.BlockChain().SubscribeChainSideEvent(worker.chainSideCh)
+
+	// Sanitize recommit interval if the user-specified one is too short.
+	// recommit := worker.config.Recommit
+	// if recommit < minRecommitInterval {
+	// 	log.Warn("Sanitizing miner recommit interval", "provided", recommit, "updated", minRecommitInterval)
+	// 	recommit = minRecommitInterval
+	// }
+
+	// go worker.mainLoop()
+	// go worker.newWorkLoop(recommit)
+	// go worker.resultLoop()
+	// go worker.taskLoop()
+
+	// Submit first work to initialize pending state.
+	// if init {
+	// 	worker.startCh <- struct{}{}
+	// }
+	return worker
+}
+
 // setEtherbase sets the etherbase used to initialize the block coinbase field.
 func (w *worker) setEtherbase(addr common.Address) {
 	w.mu.Lock()
@@ -368,8 +418,10 @@ func (w *worker) startMulti(maxNumOfTxsToSim int, minGasPriceToSim *big.Int, txs
 	w.coinbaseByDemandSet = true
 	w.timestamp = timestamp
 	w.blockNumberToSimBigInt = blockNumberToSimBigInt
-	atomic.StoreInt32(&w.running, 1)
-	w.startCh <- struct{}{}
+
+	w.commitNewWork(nil, true, time.Now().Unix())
+	// atomic.StoreInt32(&w.running, 1)
+	// w.startCh <- struct{}{}
 }
 
 // stop sets the running status as 0.
@@ -1138,7 +1190,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		log.Info("Gas pool", "height", header.Number.String(), "pool", w.current.gasPool.String())
 	}
 	if w.isCustomWork {
-		w.commit(uncles, w.fullTaskHook, true, tstart)
+		w.commitCustom(uncles, w.fullTaskHook, true, tstart)
 		w.isBlockReady = true
 	} else {
 		w.commit(uncles, w.fullTaskHook, false, tstart)
@@ -1174,6 +1226,23 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 	if update {
 		w.updateSnapshot()
 	}
+	return nil
+}
+
+func (w *worker) commitCustom(uncles []*types.Header, interval func(), update bool, start time.Time) error {
+	s := w.current.state
+	block, _, err := w.engine.FinalizeAndAssemble(w.chain, types.CopyHeader(w.current.header), s, w.current.txs, uncles, w.current.receipts)
+	if err != nil {
+		return err
+	}
+	w.timeOfLastCommit = time.Now()
+	w.unconfirmed.Shift(block.NumberU64() - 1)
+	log.Info("Commit new mining work", "number", block.Number(), "workerIdx", w.index, "sealhash", w.engine.SealHash(block.Header()),
+		"uncles", len(uncles), "txs", w.current.tcount,
+		"gas", block.GasUsed(),
+		"elapsed", common.PrettyDuration(time.Since(start)))
+	w.timeOfSim = time.Since(start)
+	w.updateSnapshot()
 	return nil
 }
 
