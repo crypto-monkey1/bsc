@@ -306,6 +306,9 @@ func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPri
 	//stop worker
 	// miner.multiWorker.stop(workerIndex)
 
+	if !miner.multiWorker.isDone(workerIndex) {
+		return nil
+	}
 	timeOfSim := miner.multiWorker.getTimeOfSim(workerIndex)
 
 	tstartDataCollection := time.Now()
