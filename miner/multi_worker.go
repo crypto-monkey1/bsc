@@ -34,7 +34,7 @@ func (w *multiWorker) stop(workerIndex int) {
 	w.workers[workerIndex].stopMulti()
 }
 
-func (w *multiWorker) start(workerIndex int, maxNumOfTxsToSim int, minGasPriceToSim *big.Int, txsArray []types.Transaction, etherbase common.Address, timestamp uint64, earliestTimeToCommit time.Time, stoppingHash common.Hash) {
+func (w *multiWorker) start(workerIndex int, maxNumOfTxsToSim int, minGasPriceToSim *big.Int, txsArray []types.Transaction, etherbase common.Address, timestamp uint64, blockNumberToSimBigInt *big.Int, earliestTimeToCommit time.Time, stoppingHash common.Hash) {
 	// log.Info("Starting multi workers")
 	// for _, worker := range w.workers {
 	// 	// log.Info("Worker started")
@@ -42,7 +42,7 @@ func (w *multiWorker) start(workerIndex int, maxNumOfTxsToSim int, minGasPriceTo
 	// 	time.Sleep(50 * time.Millisecond)
 	// }
 	log.Info("Starting worker", "workerIndex", workerIndex, "maxNumOfTxsToSim", maxNumOfTxsToSim, "minGasPriceToSim", minGasPriceToSim, "numOfTxsToSim", len(txsArray), "earliestTimeToCommit", earliestTimeToCommit, "stoppingHash", stoppingHash)
-	w.workers[workerIndex].startMulti(maxNumOfTxsToSim, minGasPriceToSim, txsArray, etherbase, timestamp, earliestTimeToCommit, stoppingHash)
+	w.workers[workerIndex].startMulti(maxNumOfTxsToSim, minGasPriceToSim, txsArray, etherbase, timestamp, blockNumberToSimBigInt, earliestTimeToCommit, stoppingHash)
 }
 
 func (w *multiWorker) isDone(workerIndex int) bool {

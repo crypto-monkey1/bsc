@@ -593,7 +593,7 @@ func (p *Parlia) verifySeal(chain consensus.ChainHeaderReader, header *types.Hea
 
 // Prepare implements consensus.Engine, preparing all the consensus fields of the
 // header for running the transactions on top.
-func (p *Parlia) Prepare(chain consensus.ChainHeaderReader, header *types.Header, timestampOverride uint64) error {
+func (p *Parlia) Prepare(chain consensus.ChainHeaderReader, header *types.Header) error {
 	header.Coinbase = p.val
 	header.Nonce = types.BlockNonce{}
 
@@ -639,13 +639,10 @@ func (p *Parlia) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 	}
 
 	// log.Info("setting block timestamp", "header.Time", header.Time, "uint64(time.Now().Unix())", uint64(time.Now().Unix()), "timestampOverride", timestampOverride)
-	if timestampOverride > 0 {
-		header.Time = timestampOverride
-	} else {
-		header.Time = p.blockTimeForRamanujanFork(snap, header, parent)
-		if header.Time < uint64(time.Now().Unix()) {
-			header.Time = uint64(time.Now().Unix())
-		}
+
+	header.Time = p.blockTimeForRamanujanFork(snap, header, parent)
+	if header.Time < uint64(time.Now().Unix()) {
+		header.Time = uint64(time.Now().Unix())
 	}
 	// log.Info("block time set", "header.Time", header.Time, "uint64(time.Now().Unix())", uint64(time.Now().Unix()), "timestampOverride", timestampOverride)
 

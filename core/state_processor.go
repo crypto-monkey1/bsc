@@ -18,6 +18,7 @@ package core
 
 import (
 	"fmt"
+	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -195,4 +196,23 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 		vm.EvmPool.Put(vmenv)
 	}()
 	return applyTransaction(msg, config, bc, author, gp, statedb, header, tx, usedGas, vmenv)
+}
+
+func ApplyTransactionCostumHeader(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config, blockNumberToSimBigInt *big.Int, timestampOverride uint64) (*types.Receipt, error) {
+	headerCostum := header
+	headerCostum.Number = blockNumberToSimBigInt
+	headerCostum.Time = timestampOverride
+	msg, err := tx.AsMessage(types.MakeSigner(config, headerCostum.Number))
+	if err != nil {
+		return nil, err
+	}
+	// Create a new context to be used in the EVM environment
+	blockContext := NewEVMBlockContext(headerCostum, bc, author)
+	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, config, cfg)
+	defer func() {
+		ite := vmenv.Interpreter()
+		vm.EVMInterpreterPool.Put(ite)
+		vm.EvmPool.Put(vmenv)
+	}()
+	return applyTransaction(msg, config, bc, author, gp, statedb, headerCostum, tx, usedGas, vmenv)
 }

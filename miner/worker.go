@@ -162,12 +162,13 @@ type worker struct {
 	remoteUncles map[common.Hash]*types.Block // A set of side blocks as the possible uncle blocks.
 	unconfirmed  *unconfirmedBlocks           // A set of locally mined blocks pending canonicalness confirmations.
 
-	mu                  sync.RWMutex // The lock used to protect the coinbase and extra fields
-	coinbase            common.Address
-	coinbaseByDemand    common.Address
-	coinbaseByDemandSet bool
-	timestamp           uint64
-	extra               []byte
+	mu                     sync.RWMutex // The lock used to protect the coinbase and extra fields
+	coinbase               common.Address
+	coinbaseByDemand       common.Address
+	coinbaseByDemandSet    bool
+	timestamp              uint64
+	blockNumberToSimBigInt *big.Int
+	extra                  []byte
 
 	index            int
 	timeOfLastCommit time.Time
@@ -354,7 +355,7 @@ func (w *worker) stop() {
 	atomic.StoreInt32(&w.running, 0)
 }
 
-func (w *worker) startMulti(maxNumOfTxsToSim int, minGasPriceToSim *big.Int, txsArray []types.Transaction, etherbase common.Address, timestamp uint64, earliestTimeToCommit time.Time, stoppingHash common.Hash) {
+func (w *worker) startMulti(maxNumOfTxsToSim int, minGasPriceToSim *big.Int, txsArray []types.Transaction, etherbase common.Address, timestamp uint64, blockNumberToSimBigInt *big.Int, earliestTimeToCommit time.Time, stoppingHash common.Hash) {
 	w.isCustomWork = true
 	w.isDummyWorker = false
 	w.isBlockReady = false
@@ -366,6 +367,7 @@ func (w *worker) startMulti(maxNumOfTxsToSim int, minGasPriceToSim *big.Int, txs
 	w.coinbase = etherbase
 	w.coinbaseByDemandSet = true
 	w.timestamp = timestamp
+	w.blockNumberToSimBigInt = blockNumberToSimBigInt
 	atomic.StoreInt32(&w.running, 1)
 	w.startCh <- struct{}{}
 }
@@ -545,9 +547,9 @@ func (w *worker) mainLoop() {
 		select {
 		case req := <-w.newWorkCh:
 			if w.coinbaseByDemandSet {
-				w.commitNewWork(req.interrupt, req.noempty, req.timestamp, w.timestamp)
+				w.commitNewWork(req.interrupt, req.noempty, req.timestamp)
 			} else {
-				w.commitNewWork(req.interrupt, req.noempty, req.timestamp, 0)
+				w.commitNewWork(req.interrupt, req.noempty, req.timestamp)
 			}
 
 		case ev := <-w.chainSideCh:
@@ -617,7 +619,7 @@ func (w *worker) mainLoop() {
 				// by clique. Of course the advance sealing(empty submission) is disabled.
 				if (w.chainConfig.Clique != nil && w.chainConfig.Clique.Period == 0) ||
 					(w.chainConfig.Parlia != nil && w.chainConfig.Parlia.Period == 0) {
-					w.commitNewWork(nil, true, time.Now().Unix(), 0)
+					w.commitNewWork(nil, true, time.Now().Unix())
 				}
 			}
 			atomic.AddInt32(&w.newTxs, int32(len(ev.Txs)))
@@ -832,12 +834,22 @@ func (w *worker) updateSnapshot() {
 
 func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Address) ([]*types.Log, error) {
 	snap := w.current.state.Snapshot()
-
-	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, *w.chain.GetVMConfig())
-	if err != nil {
-		w.current.state.RevertToSnapshot(snap)
-		return nil, err
+	var receipt *types.Receipt
+	var err error
+	if w.isCustomWork {
+		receipt, err = core.ApplyTransactionCostumHeader(w.chainConfig, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, *w.chain.GetVMConfig(), w.blockNumberToSimBigInt, w.timestamp)
+		if err != nil {
+			w.current.state.RevertToSnapshot(snap)
+			return nil, err
+		}
+	} else {
+		receipt, err = core.ApplyTransaction(w.chainConfig, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, *w.chain.GetVMConfig())
+		if err != nil {
+			w.current.state.RevertToSnapshot(snap)
+			return nil, err
+		}
 	}
+
 	w.current.txs = append(w.current.txs, tx)
 	w.current.receipts = append(w.current.receipts, receipt)
 
@@ -1004,7 +1016,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 }
 
 // commitNewWork generates several new sealing tasks based on the parent block.
-func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64, timestampOverride uint64) {
+func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
@@ -1031,7 +1043,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64, 
 		// log.Info("Switching coinbase")
 		// header.Coinbase = common.HexToAddress("0x3679479c2402e921db00923E014CD439c606C596")
 	}
-	if err := w.engine.Prepare(w.chain, header, timestampOverride); err != nil {
+	if err := w.engine.Prepare(w.chain, header); err != nil {
 		log.Error("Failed to prepare header for mining", "err", err)
 		return
 	}

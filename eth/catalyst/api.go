@@ -143,7 +143,7 @@ func (api *consensusAPI) AssembleBlock(params assembleBlockParams) (*executableD
 		Extra:      []byte{},
 		Time:       params.Timestamp,
 	}
-	err = api.eth.Engine().Prepare(bc, header, 0)
+	err = api.eth.Engine().Prepare(bc, header)
 	if err != nil {
 		return nil, err
 	}
