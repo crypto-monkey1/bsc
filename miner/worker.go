@@ -1016,7 +1016,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		}
 		// Start executing the transaction
 		w.current.state.Prepare(tx.Hash(), common.Hash{}, w.current.tcount)
-
+		log.Info("Before commmiting tx", "workerIndex", w.index, "from", from, "tx.Hash()", tx.Hash())
 		logs, err := w.commitTransaction(tx, coinbase)
 		log.Info("After commmiting tx", "workerIndex", w.index, "from", from, "tx.Hash()", tx.Hash())
 		switch {
