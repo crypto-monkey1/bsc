@@ -30,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -121,6 +122,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 
 func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, evm *vm.EVM) (*types.Receipt, error) {
 	// Create a new context to be used in the EVM environment.
+	log.Info("At applyTransactionCostumHeader")
 	txContext := NewEVMTxContext(msg)
 	evm.Reset(txContext, statedb)
 
@@ -129,7 +131,7 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	if err != nil {
 		return nil, err
 	}
-
+	log.Info("After ApplyMessage")
 	// Update the state with pending changes.
 	var root []byte
 	if config.IsByzantium(header.Number) {
@@ -199,6 +201,7 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 }
 
 func ApplyTransactionCostumHeader(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config, blockNumberToSimBigInt *big.Int, timestampOverride uint64) (*types.Receipt, error) {
+	log.Info("At ApplyTransactionCostumHeader")
 	headerCostum := header
 	headerCostum.Number = blockNumberToSimBigInt
 	headerCostum.Time = timestampOverride
