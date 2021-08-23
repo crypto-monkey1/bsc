@@ -419,6 +419,8 @@ func (w *worker) startMulti(maxNumOfTxsToSim int, minGasPriceToSim *big.Int, txs
 	w.timestamp = timestamp
 	w.blockNumberToSimBigInt = blockNumberToSimBigInt
 
+	log.Info("Before commiting new work", "workerIndex", w.index)
+
 	w.commitNewWork(nil, true, time.Now().Unix())
 	// atomic.StoreInt32(&w.running, 1)
 	// w.startCh <- struct{}{}
@@ -1141,6 +1143,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	if w.isDummyWorker {
 		return
 	}
+	log.Info("Got pending. before sorting txs", "workerIndex", w.index, "pending size", len(pending))
 	if len(pending) != 0 {
 		start := time.Now()
 		// Split the pending transactions into locals and remotes
@@ -1173,6 +1176,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 				}
 			}
 		}
+		log.Info("Before commiting txs", "workerIndex", w.index, "remoteTxs size", len(remoteTxs))
 		if len(remoteTxs) > 0 && !w.isCustomWork {
 			txs := types.NewTransactionsByPriceAndNonce(w.current.signer, remoteTxs)
 			if w.commitTransactions(txs, w.coinbase, interrupt) {
@@ -1186,9 +1190,11 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 				return
 			}
 		}
+		log.Info("Done commiting txs", "workerIndex", w.index)
 		commitTxsTimer.UpdateSince(start)
 		log.Info("Gas pool", "height", header.Number.String(), "pool", w.current.gasPool.String())
 	}
+	log.Info("Commiting block", "workerIndex", w.index)
 	if w.isCustomWork {
 		w.commitCustom(uncles, w.fullTaskHook, true, tstart)
 		w.isBlockReady = true

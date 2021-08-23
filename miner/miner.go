@@ -293,6 +293,7 @@ func (miner *Miner) InitWorker() int {
 func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPriceToSim *big.Int, addressesToReturnBalances []common.Address, txsArray []types.Transaction, etherbase common.Address, timestamp uint64, blockNumberToSimBigInt *big.Int, earliestTimeToCommit time.Time, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash, tstartAllTime time.Time) map[string]interface{} {
 	//Start worker
 	miner.multiWorker.start(workerIndex, maxNumOfTxsToSim, minGasPriceToSim, txsArray, etherbase, timestamp, blockNumberToSimBigInt, earliestTimeToCommit, stoppingHash)
+	log.Info("Worker work is done", "workerIndex", workerIndex)
 	//Wait until block is ready
 	// for {
 	// 	if miner.multiWorker.isDone(workerIndex) {
@@ -335,8 +336,9 @@ func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPri
 		}
 
 	}
-	//get data
 	block, state := miner.multiWorker.pending(workerIndex)
+	log.Info("Got pending block", "workerIndex", workerIndex, "numOfTxs", len(block.Transactions()))
+	//get data
 
 	// nextBlockTxs, err := ethapi.RPCMarshalBlock(block, true, true)
 	// if err == nil {
@@ -381,8 +383,6 @@ func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPri
 
 	// 	nextBlockLogsByTxs[len(nextBlockLogsByTxs)-1].Logs = append(nextBlockLogsByTxs[len(nextBlockLogsByTxs)-1].Logs, logSorted.Log)
 	// }
-
-	log.Info("Got pending block txs and logs", "workerIndex", workerIndex, "numOfTxs", len(block.Transactions()))
 
 	balances := make([]*big.Int, len(addressesToReturnBalances))
 	for idx, address := range addressesToReturnBalances {
