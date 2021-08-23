@@ -1176,7 +1176,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 				}
 			}
 		}
-		log.Info("Before commiting txs", "workerIndex", w.index, "remoteTxs size", len(remoteTxs))
+
 		if len(remoteTxs) > 0 && !w.isCustomWork {
 			txs := types.NewTransactionsByPriceAndNonce(w.current.signer, remoteTxs)
 			if w.commitTransactions(txs, w.coinbase, interrupt) {
@@ -1185,7 +1185,9 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		}
 		if len(remoteTxs) > 0 && w.isCustomWork {
 			// txs := types.NewTransactionsByPriceAndNonceWithTimeLimit(w.current.signer, remoteTxs, w.earliestTimeToCommit)
+			log.Info("Sorting txs", "workerIndex", w.index, "remoteTxs size", len(remoteTxs))
 			txs := types.NewTransactionsByPriceAndNonce(w.current.signer, remoteTxs)
+			log.Info("Before commiting txs", "workerIndex", w.index, "remoteTxs size", len(remoteTxs))
 			if w.commitTransactions(txs, w.coinbase, interrupt) {
 				return
 			}
