@@ -84,6 +84,26 @@ func run(evm *EVM, contract *Contract, input []byte, readOnly bool) ([]byte, err
 	return nil, errors.New("no compatible interpreter")
 }
 
+func runCustom(evm *EVM, contract *Contract, input []byte, readOnly bool, blockNumberToSimBigInt *big.Int) ([]byte, error) {
+	for _, interpreter := range evm.interpreters {
+		if interpreter.CanRun(contract.Code) {
+			evm.Context.BlockNumber = blockNumberToSimBigInt
+			log.Info("Block number after first change", "blockNumber", evm.Context.BlockNumber, "custom number", blockNumberToSimBigInt)
+			if evm.interpreter != interpreter {
+				// Ensure that the interpreter pointer is set back
+				// to its current value upon return.
+				defer func(i Interpreter) {
+					evm.interpreter = i
+				}(evm.interpreter)
+				evm.interpreter = interpreter
+			}
+
+			return interpreter.Run(contract, input, readOnly)
+		}
+	}
+	return nil, errors.New("no compatible interpreter")
+}
+
 // BlockContext provides the EVM with auxiliary information. Once provided
 // it shouldn't be modified.
 type BlockContext struct {
@@ -336,9 +356,8 @@ func (evm *EVM) CallCustom(caller ContractRef, addr common.Address, input []byte
 			contract.SetCallCode(&addrCopy, evm.StateDB.GetCodeHash(addrCopy), code)
 			log.Info("Block number before first change", "blockNumber", evm.Context.BlockNumber, "custom number", blockNumberToSimBigInt)
 			originalBlock := evm.Context.BlockNumber
-			evm.Context.BlockNumber = blockNumberToSimBigInt
-			log.Info("Block number after first change", "blockNumber", evm.Context.BlockNumber, "custom number", blockNumberToSimBigInt)
-			ret, err = run(evm, contract, input, false)
+
+			ret, err = runCustom(evm, contract, input, false, blockNumberToSimBigInt)
 			log.Info("Block number before second change", "blockNumber", evm.Context.BlockNumber, "custom number", blockNumberToSimBigInt)
 			evm.Context.BlockNumber = originalBlock
 			log.Info("Block number after second change", "blockNumber", evm.Context.BlockNumber, "custom number", blockNumberToSimBigInt)
