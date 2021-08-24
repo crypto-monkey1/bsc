@@ -41,7 +41,6 @@ func (w *multiWorker) start(workerIndex int, maxNumOfTxsToSim int, minGasPriceTo
 	// 	worker.start()
 	// 	time.Sleep(50 * time.Millisecond)
 	// }
-	log.Info("Starting worker", "workerIndex", workerIndex, "maxNumOfTxsToSim", maxNumOfTxsToSim, "minGasPriceToSim", minGasPriceToSim, "numOfTxsToSim", len(txsArray), "earliestTimeToCommit", earliestTimeToCommit, "stoppingHash", stoppingHash)
 	w.workers[workerIndex].startMulti(maxNumOfTxsToSim, minGasPriceToSim, txsArray, etherbase, timestamp, blockNumberToSimBigInt, earliestTimeToCommit, stoppingHash)
 }
 
