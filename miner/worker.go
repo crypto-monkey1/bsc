@@ -176,6 +176,7 @@ type worker struct {
 	isDummyWorker        bool
 	isCustomWork         bool
 	isBlockReady         bool
+	workingCurrently     bool
 	maxNumOfTxsToSim     int
 	minGasPriceToSim     *big.Int
 	earliestTimeToCommit time.Time
@@ -409,6 +410,7 @@ func (w *worker) startMulti(maxNumOfTxsToSim int, minGasPriceToSim *big.Int, txs
 	w.isCustomWork = true
 	w.isDummyWorker = false
 	w.isBlockReady = false
+	w.workingCurrently = true
 	w.maxNumOfTxsToSim = maxNumOfTxsToSim
 	w.minGasPriceToSim = minGasPriceToSim
 	w.earliestTimeToCommit = earliestTimeToCommit

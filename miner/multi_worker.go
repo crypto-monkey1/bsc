@@ -48,6 +48,32 @@ func (w *multiWorker) isDone(workerIndex int) bool {
 	return w.workers[workerIndex].isBlockReady
 }
 
+func (w *multiWorker) isWorking(workerIndex int) bool {
+	return w.workers[workerIndex].workingCurrently
+}
+
+func (w *multiWorker) finishedWork(workerIndex int) {
+	w.workers[workerIndex].workingCurrently = false
+}
+
+func (w *multiWorker) findFreeWorker() int {
+	log.Info("Searching for free worker")
+	newWorkerIndex := -1
+	for i, worker := range w.workers {
+		if !worker.workingCurrently {
+			log.Info("Found free worker", "free worker index", i)
+			newWorkerIndex = i
+			break
+		}
+	}
+	if newWorkerIndex < 0 {
+		log.Info("didnt find any free workers, creating one.")
+		newWorkerIndex = w.addWorker()
+	}
+	log.Info("Returning free worker index", "free worker index", newWorkerIndex)
+	return newWorkerIndex
+}
+
 func (w *multiWorker) pendingReceipts(workerIndex int) []*types.Receipt {
 	return w.workers[workerIndex].pendingReceipts()
 }

@@ -291,6 +291,11 @@ func (miner *Miner) InitWorker() int {
 }
 
 func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPriceToSim *big.Int, addressesToReturnBalances []common.Address, txsArray []types.Transaction, etherbase common.Address, timestamp uint64, blockNumberToSimBigInt *big.Int, earliestTimeToCommit time.Time, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash, tstartAllTime time.Time) map[string]interface{} {
+
+	if miner.multiWorker.isWorking(workerIndex) {
+		workerIndex = miner.multiWorker.findFreeWorker()
+	}
+
 	log.Info("Worker sim params", "workerIndex", workerIndex, "etherbase", etherbase, "blockNumber", blockNumberToSimBigInt, "timestmap", timestamp, "maxNumOfTxsToSim", maxNumOfTxsToSim, "minGasPriceToSim", minGasPriceToSim, "numOfTxsToSim", len(txsArray), "earliestTimeToCommit", earliestTimeToCommit, "stoppingHash", stoppingHash)
 	//Start worker
 	miner.multiWorker.start(workerIndex, maxNumOfTxsToSim, minGasPriceToSim, txsArray, etherbase, timestamp, blockNumberToSimBigInt, earliestTimeToCommit, stoppingHash)
@@ -311,6 +316,7 @@ func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPri
 		return nil
 	}
 	log.Info("Worker work is done", "workerIndex", workerIndex)
+	miner.multiWorker.finishedWork(workerIndex)
 	timeOfSim := miner.multiWorker.getTimeOfSim(workerIndex)
 
 	tstartDataCollection := time.Now()
