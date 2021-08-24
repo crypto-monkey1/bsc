@@ -278,6 +278,6 @@ func ApplyTransactionCostumHeader(config *params.ChainConfig, bc ChainContext, a
 		vm.EVMInterpreterPool.Put(ite)
 		vm.EvmPool.Put(vmenv)
 	}()
-	vmenv.Context.BlockNumber = blockNumberToSimBigInt
+	// vmenv.Context.BlockNumber = blockNumberToSimBigInt
 	return applyTransactionCustom(msg, config, bc, author, gp, statedb, header, tx, usedGas, vmenv, blockNumberToSimBigInt)
 }
