@@ -341,7 +341,7 @@ func (st *StateTransition) TransitionDbCustom(blockNumberToSimBigInt *big.Int) (
 		vmerr error // vm errors do not effect consensus and are therefore not assigned to err
 	)
 	originalBlock := st.evm.Context.BlockNumber
-	// st.evm.Context.BlockNumber = blockNumberToSimBigInt
+	st.evm.Context.BlockNumber = blockNumberToSimBigInt
 	if contractCreation {
 		ret, _, st.gas, vmerr = st.evm.Create(sender, st.data, st.gas, st.value)
 	} else {
