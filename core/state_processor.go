@@ -204,17 +204,18 @@ func ApplyTransactionCostumHeader(config *params.ChainConfig, bc ChainContext, a
 	headerCostum := header
 	headerCostum.Number = blockNumberToSimBigInt
 	headerCostum.Time = timestampOverride
-	msg, err := tx.AsMessage(types.MakeSigner(config, headerCostum.Number))
+	msg, err := tx.AsMessage(types.MakeSigner(config, header.Number))
 	if err != nil {
 		return nil, err
 	}
 	// Create a new context to be used in the EVM environment
-	blockContext := NewEVMBlockContext(headerCostum, bc, author)
+	blockContext := NewEVMBlockContext(header, bc, author)
+	blockContext.BlockNumber = blockNumberToSimBigInt
 	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, config, cfg)
 	defer func() {
 		ite := vmenv.Interpreter()
 		vm.EVMInterpreterPool.Put(ite)
 		vm.EvmPool.Put(vmenv)
 	}()
-	return applyTransaction(msg, config, bc, author, gp, statedb, headerCostum, tx, usedGas, vmenv)
+	return applyTransaction(msg, config, bc, author, gp, statedb, header, tx, usedGas, vmenv)
 }
