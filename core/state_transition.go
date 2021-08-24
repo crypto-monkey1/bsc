@@ -346,11 +346,12 @@ func (st *StateTransition) TransitionDbCustom(blockNumberToSimBigInt *big.Int) (
 	if contractCreation {
 		ret, _, st.gas, vmerr = st.evm.Create(sender, st.data, st.gas, st.value)
 	} else {
+
+		// Increment the nonce for the next transaction
+		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 		originalBlock := st.evm.Context.BlockNumber
 		st.evm.Context.BlockNumber = blockNumberToSimBigInt
 		log.Info("Block number after first change", "blockNumber", st.evm.Context.BlockNumber, "custom number", blockNumberToSimBigInt)
-		// Increment the nonce for the next transaction
-		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 		ret, st.gas, vmerr = st.evm.Call(sender, st.to(), st.data, st.gas, st.value)
 		log.Info("Block number before second change", "blockNumber", st.evm.Context.BlockNumber, "custom number", blockNumberToSimBigInt)
 		st.evm.Context.BlockNumber = originalBlock
