@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -340,16 +341,22 @@ func (st *StateTransition) TransitionDbCustom(blockNumberToSimBigInt *big.Int) (
 		ret   []byte
 		vmerr error // vm errors do not effect consensus and are therefore not assigned to err
 	)
-	originalBlock := st.evm.Context.BlockNumber
-	st.evm.Context.BlockNumber = blockNumberToSimBigInt
+	log.Info("Block number before first change", "blockNumber", st.evm.Context.BlockNumber, "custom number", blockNumberToSimBigInt)
+
 	if contractCreation {
 		ret, _, st.gas, vmerr = st.evm.Create(sender, st.data, st.gas, st.value)
 	} else {
+		originalBlock := st.evm.Context.BlockNumber
+		st.evm.Context.BlockNumber = blockNumberToSimBigInt
+		log.Info("Block number after first change", "blockNumber", st.evm.Context.BlockNumber, "custom number", blockNumberToSimBigInt)
 		// Increment the nonce for the next transaction
 		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 		ret, st.gas, vmerr = st.evm.Call(sender, st.to(), st.data, st.gas, st.value)
+		log.Info("Block number before second change", "blockNumber", st.evm.Context.BlockNumber, "custom number", blockNumberToSimBigInt)
+		st.evm.Context.BlockNumber = originalBlock
+		log.Info("Block number after second change", "blockNumber", st.evm.Context.BlockNumber, "custom number", blockNumberToSimBigInt)
 	}
-	st.evm.Context.BlockNumber = originalBlock
+
 	st.refundGas()
 
 	// consensus engine is parlia
