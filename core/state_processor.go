@@ -210,12 +210,14 @@ func ApplyTransactionCostumHeader(config *params.ChainConfig, bc ChainContext, a
 	}
 	// Create a new context to be used in the EVM environment
 	blockContext := NewEVMBlockContext(header, bc, author)
-	blockContext.BlockNumber = blockNumberToSimBigInt
+	// blockContext.BlockNumber = blockNumberToSimBigInt
 	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, config, cfg)
+
 	defer func() {
 		ite := vmenv.Interpreter()
 		vm.EVMInterpreterPool.Put(ite)
 		vm.EvmPool.Put(vmenv)
 	}()
+	vmenv.Context.BlockNumber = blockNumberToSimBigInt
 	return applyTransaction(msg, config, bc, author, gp, statedb, header, tx, usedGas, vmenv)
 }
