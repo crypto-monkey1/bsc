@@ -98,7 +98,7 @@ func runCustom(evm *EVM, contract *Contract, input []byte, readOnly bool, blockN
 				evm.interpreter = interpreter
 			}
 
-			return interpreter.Run(contract, input, readOnly)
+			return interpreter.RunCustom(contract, input, readOnly)
 		}
 	}
 	return nil, errors.New("no compatible interpreter")
