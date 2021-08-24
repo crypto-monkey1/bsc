@@ -201,9 +201,9 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 
 func ApplyTransactionCostumHeader(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config, blockNumberToSimBigInt *big.Int, timestampOverride uint64) (*types.Receipt, error) {
 	// log.Info("At ApplyTransactionCostumHeader")
-	headerCostum := header
-	headerCostum.Number = blockNumberToSimBigInt
-	headerCostum.Time = timestampOverride
+	// headerCostum := header
+	// headerCostum.Number = blockNumberToSimBigInt
+	// headerCostum.Time = timestampOverride
 	msg, err := tx.AsMessage(types.MakeSigner(config, header.Number))
 	if err != nil {
 		return nil, err
