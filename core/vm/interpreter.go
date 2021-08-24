@@ -454,7 +454,7 @@ func (in *EVMInterpreter) RunCustom(contract *Contract, input []byte, readOnly b
 			in.cfg.Tracer.CaptureState(in.evm, pc, op, gasCopy, cost, callContext, in.returnData, in.evm.depth, err)
 			logged = true
 		}
-
+		log.Info("Before executing operation", "op", op)
 		// execute the operation
 		res, err = operation.execute(&pc, in, callContext)
 		// if the operation clears the return data (e.g. it has returning data)
