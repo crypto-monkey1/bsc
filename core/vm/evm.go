@@ -83,7 +83,7 @@ func run(evm *EVM, contract *Contract, input []byte, readOnly bool) ([]byte, err
 	return nil, errors.New("no compatible interpreter")
 }
 
-func runCustom(evm *EVM, contract *Contract, input []byte, readOnly bool, blockNumberToSimBigInt *big.Int) ([]byte, error) {
+func runCustom(evm *EVM, contract *Contract, input []byte, readOnly bool, blockNumberToSimBigInt *big.Int, timestampOverride uint64) ([]byte, error) {
 	for _, interpreter := range evm.interpreters {
 		if interpreter.CanRun(contract.Code) {
 			// evm.Context.BlockNumber = blockNumberToSimBigInt
@@ -97,7 +97,7 @@ func runCustom(evm *EVM, contract *Contract, input []byte, readOnly bool, blockN
 				evm.interpreter = interpreter
 			}
 
-			return interpreter.RunCustom(contract, input, readOnly, blockNumberToSimBigInt)
+			return interpreter.RunCustom(contract, input, readOnly, blockNumberToSimBigInt, timestampOverride)
 		}
 	}
 	return nil, errors.New("no compatible interpreter")
@@ -303,7 +303,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 	return ret, gas, err
 }
 
-func (evm *EVM) CallCustom(caller ContractRef, addr common.Address, input []byte, gas uint64, value *big.Int, blockNumberToSimBigInt *big.Int) (ret []byte, leftOverGas uint64, err error) {
+func (evm *EVM) CallCustom(caller ContractRef, addr common.Address, input []byte, gas uint64, value *big.Int, blockNumberToSimBigInt *big.Int, timestampOverride uint64) (ret []byte, leftOverGas uint64, err error) {
 	if evm.vmConfig.NoRecursion && evm.depth > 0 {
 		return nil, gas, nil
 	}
@@ -356,7 +356,7 @@ func (evm *EVM) CallCustom(caller ContractRef, addr common.Address, input []byte
 			// log.Info("Block number before first change", "blockNumber", evm.Context.BlockNumber, "custom number", blockNumberToSimBigInt)
 			// originalBlock := evm.Context.BlockNumber
 
-			ret, err = runCustom(evm, contract, input, false, blockNumberToSimBigInt)
+			ret, err = runCustom(evm, contract, input, false, blockNumberToSimBigInt, timestampOverride)
 			// log.Info("Block number before second change", "blockNumber", evm.Context.BlockNumber, "custom number", blockNumberToSimBigInt)
 			// evm.Context.BlockNumber = originalBlock
 			// log.Info("Block number after second change", "blockNumber", evm.Context.BlockNumber, "custom number", blockNumberToSimBigInt)

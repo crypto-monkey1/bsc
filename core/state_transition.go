@@ -173,9 +173,9 @@ func ApplyMessage(evm *vm.EVM, msg Message, gp *GasPool) (*ExecutionResult, erro
 	return NewStateTransition(evm, msg, gp).TransitionDb()
 }
 
-func ApplyMessageCustom(evm *vm.EVM, msg Message, gp *GasPool, blockNumberToSimBigInt *big.Int) (*ExecutionResult, error) {
+func ApplyMessageCustom(evm *vm.EVM, msg Message, gp *GasPool, blockNumberToSimBigInt *big.Int, timestampOverride uint64) (*ExecutionResult, error) {
 	// log.Info("At ApplyMessage")
-	return NewStateTransition(evm, msg, gp).TransitionDbCustom(blockNumberToSimBigInt)
+	return NewStateTransition(evm, msg, gp).TransitionDbCustom(blockNumberToSimBigInt, timestampOverride)
 }
 
 // to returns the recipient of the message.
@@ -296,7 +296,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	}, nil
 }
 
-func (st *StateTransition) TransitionDbCustom(blockNumberToSimBigInt *big.Int) (*ExecutionResult, error) {
+func (st *StateTransition) TransitionDbCustom(blockNumberToSimBigInt *big.Int, timestampOverride uint64) (*ExecutionResult, error) {
 	// First check this message satisfies all consensus rules before
 	// applying the message. The rules include these clauses
 	//
@@ -347,7 +347,7 @@ func (st *StateTransition) TransitionDbCustom(blockNumberToSimBigInt *big.Int) (
 		// Increment the nonce for the next transaction
 		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 
-		ret, st.gas, vmerr = st.evm.CallCustom(sender, st.to(), st.data, st.gas, st.value, blockNumberToSimBigInt)
+		ret, st.gas, vmerr = st.evm.CallCustom(sender, st.to(), st.data, st.gas, st.value, blockNumberToSimBigInt, timestampOverride)
 
 	}
 

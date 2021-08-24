@@ -419,7 +419,7 @@ func (w *worker) startMulti(maxNumOfTxsToSim int, minGasPriceToSim *big.Int, txs
 	w.timestamp = timestamp
 	w.blockNumberToSimBigInt = blockNumberToSimBigInt
 
-	log.Info("Before commiting new work", "workerIndex", w.index)
+	// log.Info("Before commiting new work", "workerIndex", w.index)
 
 	atomic.StoreInt32(&w.running, 1)
 
@@ -919,7 +919,7 @@ func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Addres
 }
 
 func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coinbase common.Address, interrupt *int32) bool {
-	startTime := time.Now()
+	// startTime := time.Now()
 	// Short circuit if current is nil
 	if w.current == nil {
 		return true
@@ -940,7 +940,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 	// }
 	txCount := 0
 	stopCommit := false
-	log.Info("Before commiting txs loop", "workerIdx", w.index)
+	// log.Info("Before commiting txs loop", "workerIdx", w.index)
 	// LOOP:
 	for {
 		// In the following three cases, we will interrupt the execution of the transaction.
@@ -1007,7 +1007,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		// during transaction acceptance is the transaction pool.
 		//
 		// We use the eip155 signer regardless of the current hf.
-		from, _ := types.Sender(w.current.signer, tx)
+		// from, _ := types.Sender(w.current.signer, tx)
 		// Check whether the tx is replay protected. If we're not in the EIP155 hf
 		// phase, start ignoring the sender until we do.
 		if tx.Protected() && !w.chainConfig.IsEIP155(w.current.header.Number) {
@@ -1017,32 +1017,32 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		}
 		// Start executing the transaction
 		w.current.state.Prepare(tx.Hash(), common.Hash{}, w.current.tcount)
-		log.Info("Before commmiting tx", "workerIndex", w.index, "from", from, "tx.Hash()", tx.Hash())
+		// log.Info("Before commmiting tx", "workerIndex", w.index, "from", from, "tx.Hash()", tx.Hash())
 		logs, err := w.commitTransaction(tx, coinbase)
-		if time.Since(startTime) > 1e9 {
-			log.Info("Too much time has passed", "workerIndex", w.index, "time", time.Since(startTime), "from", from, "tx.Hash()", tx.Hash())
-			return true
-		}
-		log.Info("After commmiting tx", "workerIndex", w.index, "from", from, "tx.Hash()", tx.Hash())
+		// if time.Since(startTime) > 1e9 {
+		// 	log.Info("Too much time has passed", "workerIndex", w.index, "time", time.Since(startTime), "from", from, "tx.Hash()", tx.Hash())
+		// 	return true
+		// }
+		// log.Info("After commmiting tx", "workerIndex", w.index, "from", from, "tx.Hash()", tx.Hash())
 		switch {
 		case errors.Is(err, core.ErrGasLimitReached):
 			// Pop the current out-of-gas transaction without shifting in the next from the account
-			log.Info("Gas limit exceeded for current block")
+			// log.Info("Gas limit exceeded for current block")
 			txs.Pop()
 
 		case errors.Is(err, core.ErrNonceTooLow):
 			// New head notification data race between the transaction pool and miner, shift
-			log.Info("Skipping transaction with low nonce", "nonce", tx.Nonce())
+			// log.Info("Skipping transaction with low nonce", "nonce", tx.Nonce())
 			txs.Shift()
 
 		case errors.Is(err, core.ErrNonceTooHigh):
 			// Reorg notification data race between the transaction pool and miner, skip account =
-			log.Info("Skipping account with hight nonce", "nonce", tx.Nonce())
+			// log.Info("Skipping account with hight nonce", "nonce", tx.Nonce())
 			txs.Pop()
 
 		case errors.Is(err, nil):
 			// Everything ok, collect the logs and shift in the next transaction from the same account
-			log.Info("All good")
+			// log.Info("All good")
 			coalescedLogs = append(coalescedLogs, logs...)
 			w.current.tcount++
 			txs.Shift()
@@ -1050,17 +1050,17 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 
 		case errors.Is(err, core.ErrTxTypeNotSupported):
 			// Pop the unsupported transaction without shifting in the next from the account
-			log.Info("Skipping unsupported transaction type", "sender", from, "type", tx.Type())
+			// log.Info("Skipping unsupported transaction type", "sender", from, "type", tx.Type())
 			txs.Pop()
 
 		default:
 			// Strange error, discard the transaction and get the next in line (note, the
 			// nonce-too-high clause will prevent us from executing in vain).
-			log.Info("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
+			// log.Info("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
 			txs.Shift()
 		}
 	}
-	log.Info("after commiting txs loop", "workerIdx", w.index)
+	// log.Info("after commiting txs loop", "workerIdx", w.index)
 	if (!w.isRunning() && len(coalescedLogs) > 0) || (w.isRunning() && w.isCustomWork) {
 		// We don't push the pendingLogsEvent while we are mining. The reason is that
 		// when we are mining, the worker will regenerate a mining block every 3 seconds.
@@ -1201,14 +1201,14 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		}
 		if len(remoteTxs) > 0 && w.isCustomWork {
 			// txs := types.NewTransactionsByPriceAndNonceWithTimeLimit(w.current.signer, remoteTxs, w.earliestTimeToCommit)
-			log.Info("Sorting txs", "workerIndex", w.index, "remoteTxs size", len(remoteTxs))
+			// log.Info("Sorting txs", "workerIndex", w.index, "remoteTxs size", len(remoteTxs))
 			txs := types.NewTransactionsByPriceAndNonce(w.current.signer, remoteTxs)
-			log.Info("Before commiting txs", "workerIndex", w.index, "remoteTxs size", len(remoteTxs))
+			// log.Info("Before commiting txs", "workerIndex", w.index, "remoteTxs size", len(remoteTxs))
 			if w.commitTransactions(txs, w.coinbase, interrupt) {
 				return
 			}
 		}
-		log.Info("Done commiting txs", "workerIndex", w.index)
+		// log.Info("Done commiting txs", "workerIndex", w.index)
 		commitTxsTimer.UpdateSince(start)
 		log.Info("Gas pool", "height", header.Number.String(), "pool", w.current.gasPool.String())
 	}

@@ -179,14 +179,14 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	return receipt, err
 }
 
-func applyTransactionCustom(msg types.Message, config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, evm *vm.EVM, blockNumberToSimBigInt *big.Int) (*types.Receipt, error) {
+func applyTransactionCustom(msg types.Message, config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, evm *vm.EVM, blockNumberToSimBigInt *big.Int, timestampOverride uint64) (*types.Receipt, error) {
 	// Create a new context to be used in the EVM environment.
 	// log.Info("At applyTransactionCostumHeader")
 	txContext := NewEVMTxContext(msg)
 	evm.Reset(txContext, statedb)
 
 	// Apply the transaction to the current state (included in the env).
-	result, err := ApplyMessageCustom(evm, msg, gp, blockNumberToSimBigInt)
+	result, err := ApplyMessageCustom(evm, msg, gp, blockNumberToSimBigInt, timestampOverride)
 	if err != nil {
 		return nil, err
 	}
@@ -279,5 +279,5 @@ func ApplyTransactionCostumHeader(config *params.ChainConfig, bc ChainContext, a
 		vm.EvmPool.Put(vmenv)
 	}()
 	// vmenv.Context.BlockNumber = blockNumberToSimBigInt
-	return applyTransactionCustom(msg, config, bc, author, gp, statedb, header, tx, usedGas, vmenv, blockNumberToSimBigInt)
+	return applyTransactionCustom(msg, config, bc, author, gp, statedb, header, tx, usedGas, vmenv, blockNumberToSimBigInt, timestampOverride)
 }
