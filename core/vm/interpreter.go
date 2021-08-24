@@ -18,6 +18,7 @@ package vm
 
 import (
 	"hash"
+	"math/big"
 	"sync"
 	"sync/atomic"
 
@@ -55,7 +56,7 @@ type Interpreter interface {
 	// Run loops and evaluates the contract's code with the given input data and returns
 	// the return byte-slice and an error if one occurred.
 	Run(contract *Contract, input []byte, static bool) ([]byte, error)
-	RunCustom(contract *Contract, input []byte, static bool) ([]byte, error)
+	RunCustom(contract *Contract, input []byte, static bool, blockNumberToSimBigInt *big.Int) ([]byte, error)
 	// CanRun tells if the contract, passed as an argument, can be
 	// run by the current interpreter. This is meant so that the
 	// caller can do something like:
@@ -311,7 +312,7 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 	return nil, nil
 }
 
-func (in *EVMInterpreter) RunCustom(contract *Contract, input []byte, readOnly bool) (ret []byte, err error) {
+func (in *EVMInterpreter) RunCustom(contract *Contract, input []byte, readOnly bool, blockNumberToSimBigInt *big.Int) (ret []byte, err error) {
 
 	// Increment the call depth which is restricted to 1024
 	in.evm.depth++
@@ -454,9 +455,18 @@ func (in *EVMInterpreter) RunCustom(contract *Contract, input []byte, readOnly b
 			in.cfg.Tracer.CaptureState(in.evm, pc, op, gasCopy, cost, callContext, in.returnData, in.evm.depth, err)
 			logged = true
 		}
-		log.Info("Before executing operation", "op", op)
+		originalBlock := in.evm.Context.BlockNumber
+		if op == NUMBER {
+			log.Info("Before executing NUMBER operation", "op", op, "current blockNumber", in.evm.Context.BlockNumber, "blockNumber to sim", blockNumberToSimBigInt)
+			in.evm.Context.BlockNumber = blockNumberToSimBigInt
+		}
 		// execute the operation
 		res, err = operation.execute(&pc, in, callContext)
+
+		if op == NUMBER {
+			log.Info("After executing NUMBER operation", "op", op, "current blockNumber", in.evm.Context.BlockNumber, "blockNumber to sim", blockNumberToSimBigInt)
+			in.evm.Context.BlockNumber = originalBlock
+		}
 		// if the operation clears the return data (e.g. it has returning data)
 		// set the last return to the result of the operation.
 		if operation.returns {

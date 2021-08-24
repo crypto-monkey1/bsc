@@ -25,7 +25,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/holiman/uint256"
 )
@@ -87,8 +86,8 @@ func run(evm *EVM, contract *Contract, input []byte, readOnly bool) ([]byte, err
 func runCustom(evm *EVM, contract *Contract, input []byte, readOnly bool, blockNumberToSimBigInt *big.Int) ([]byte, error) {
 	for _, interpreter := range evm.interpreters {
 		if interpreter.CanRun(contract.Code) {
-			evm.Context.BlockNumber = blockNumberToSimBigInt
-			log.Info("Block number after first change", "blockNumber", evm.Context.BlockNumber, "custom number", blockNumberToSimBigInt)
+			// evm.Context.BlockNumber = blockNumberToSimBigInt
+
 			if evm.interpreter != interpreter {
 				// Ensure that the interpreter pointer is set back
 				// to its current value upon return.
@@ -98,7 +97,7 @@ func runCustom(evm *EVM, contract *Contract, input []byte, readOnly bool, blockN
 				evm.interpreter = interpreter
 			}
 
-			return interpreter.RunCustom(contract, input, readOnly)
+			return interpreter.RunCustom(contract, input, readOnly, blockNumberToSimBigInt)
 		}
 	}
 	return nil, errors.New("no compatible interpreter")
@@ -354,13 +353,13 @@ func (evm *EVM) CallCustom(caller ContractRef, addr common.Address, input []byte
 			// The depth-check is already done, and precompiles handled above
 			contract := NewContract(caller, AccountRef(addrCopy), value, gas)
 			contract.SetCallCode(&addrCopy, evm.StateDB.GetCodeHash(addrCopy), code)
-			log.Info("Block number before first change", "blockNumber", evm.Context.BlockNumber, "custom number", blockNumberToSimBigInt)
-			originalBlock := evm.Context.BlockNumber
+			// log.Info("Block number before first change", "blockNumber", evm.Context.BlockNumber, "custom number", blockNumberToSimBigInt)
+			// originalBlock := evm.Context.BlockNumber
 
 			ret, err = runCustom(evm, contract, input, false, blockNumberToSimBigInt)
-			log.Info("Block number before second change", "blockNumber", evm.Context.BlockNumber, "custom number", blockNumberToSimBigInt)
-			evm.Context.BlockNumber = originalBlock
-			log.Info("Block number after second change", "blockNumber", evm.Context.BlockNumber, "custom number", blockNumberToSimBigInt)
+			// log.Info("Block number before second change", "blockNumber", evm.Context.BlockNumber, "custom number", blockNumberToSimBigInt)
+			// evm.Context.BlockNumber = originalBlock
+			// log.Info("Block number after second change", "blockNumber", evm.Context.BlockNumber, "custom number", blockNumberToSimBigInt)
 			gas = contract.Gas
 		}
 	}
