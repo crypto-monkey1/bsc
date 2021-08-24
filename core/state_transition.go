@@ -173,6 +173,11 @@ func ApplyMessage(evm *vm.EVM, msg Message, gp *GasPool) (*ExecutionResult, erro
 	return NewStateTransition(evm, msg, gp).TransitionDb()
 }
 
+func ApplyMessageCustom(evm *vm.EVM, msg Message, gp *GasPool, blockNumberToSimBigInt *big.Int) (*ExecutionResult, error) {
+	// log.Info("At ApplyMessage")
+	return NewStateTransition(evm, msg, gp).TransitionDbCustom(blockNumberToSimBigInt)
+}
+
 // to returns the recipient of the message.
 func (st *StateTransition) to() common.Address {
 	if st.msg == nil || st.msg.To() == nil /* contract creation */ {
@@ -275,6 +280,76 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 		ret, st.gas, vmerr = st.evm.Call(sender, st.to(), st.data, st.gas, st.value)
 	}
+	st.refundGas()
+
+	// consensus engine is parlia
+	if st.evm.ChainConfig().Parlia != nil {
+		st.state.AddBalance(consensus.SystemAddress, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
+	} else {
+		st.state.AddBalance(st.evm.Context.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
+	}
+
+	return &ExecutionResult{
+		UsedGas:    st.gasUsed(),
+		Err:        vmerr,
+		ReturnData: ret,
+	}, nil
+}
+
+func (st *StateTransition) TransitionDbCustom(blockNumberToSimBigInt *big.Int) (*ExecutionResult, error) {
+	// First check this message satisfies all consensus rules before
+	// applying the message. The rules include these clauses
+	//
+	// 1. the nonce of the message caller is correct
+	// 2. caller has enough balance to cover transaction fee(gaslimit * gasprice)
+	// 3. the amount of gas required is available in the block
+	// 4. the purchased gas is enough to cover intrinsic usage
+	// 5. there is no overflow when calculating intrinsic gas
+	// 6. caller has enough balance to cover asset transfer for **topmost** call
+
+	// Check clauses 1-3, buy gas if everything is correct
+	if err := st.preCheck(); err != nil {
+		return nil, err
+	}
+	msg := st.msg
+	sender := vm.AccountRef(msg.From())
+	homestead := st.evm.ChainConfig().IsHomestead(st.evm.Context.BlockNumber)
+	istanbul := st.evm.ChainConfig().IsIstanbul(st.evm.Context.BlockNumber)
+	contractCreation := msg.To() == nil
+
+	// Check clauses 4-5, subtract intrinsic gas if everything is correct
+	gas, err := IntrinsicGas(st.data, st.msg.AccessList(), contractCreation, homestead, istanbul)
+	if err != nil {
+		return nil, err
+	}
+	if st.gas < gas {
+		return nil, fmt.Errorf("%w: have %d, want %d", ErrIntrinsicGas, st.gas, gas)
+	}
+	st.gas -= gas
+
+	// Check clause 6
+	if msg.Value().Sign() > 0 && !st.evm.Context.CanTransfer(st.state, msg.From(), msg.Value()) {
+		return nil, fmt.Errorf("%w: address %v", ErrInsufficientFundsForTransfer, msg.From().Hex())
+	}
+
+	// Set up the initial access list.
+	if rules := st.evm.ChainConfig().Rules(st.evm.Context.BlockNumber); rules.IsBerlin {
+		st.state.PrepareAccessList(msg.From(), msg.To(), vm.ActivePrecompiles(rules), msg.AccessList())
+	}
+	var (
+		ret   []byte
+		vmerr error // vm errors do not effect consensus and are therefore not assigned to err
+	)
+	originalBlock := st.evm.Context.BlockNumber
+	st.evm.Context.BlockNumber = blockNumberToSimBigInt
+	if contractCreation {
+		ret, _, st.gas, vmerr = st.evm.Create(sender, st.data, st.gas, st.value)
+	} else {
+		// Increment the nonce for the next transaction
+		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+		ret, st.gas, vmerr = st.evm.Call(sender, st.to(), st.data, st.gas, st.value)
+	}
+	st.evm.Context.BlockNumber = originalBlock
 	st.refundGas()
 
 	// consensus engine is parlia
