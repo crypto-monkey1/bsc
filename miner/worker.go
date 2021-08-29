@@ -1183,13 +1183,31 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 				for i, _ := range w.txsArray {
 					from, _ := types.Sender(w.current.signer, &w.txsArray[i])
 					if len(remoteTxs[from]) == 0 {
-						// log.Info("added a new tx from a new address")
+
 						txsArray := make(types.Transactions, 0, 1)
 						txsArray = append(txsArray, &w.txsArray[i])
 						remoteTxs[from] = txsArray
+						log.Info("added a new tx from a new address", "remoteTxs[from]", remoteTxs[from])
 					} else {
-						// log.Info("added a new tx from a old address")
-						remoteTxs[from] = append(remoteTxs[from], &w.txsArray[i])
+						txsArray := remoteTxs[from]
+						needToAdd := true
+						for j, tx := range txsArray {
+							if tx.Nonce() == w.txsArray[i].Nonce() {
+								needToAdd = false
+								log.Info("added tx has a tx with same nonce in pending already", "txs nonce", tx.Nonce())
+								if w.txsArray[i].GasPriceCmp(tx) == 1 {
+									log.Info("Added tx has higher gas price. switching.", "added tx gas price", w.txsArray[i].GasPrice(), "pending tx gas price", tx.GasPrice())
+									remoteTxs[from][j] = &w.txsArray[i]
+								} else {
+									log.Info("Added tx has lower gas price. switching.", "added tx gas price", w.txsArray[i].GasPrice(), "pending tx gas price", tx.GasPrice())
+								}
+							}
+						}
+						if needToAdd {
+							remoteTxs[from] = append(remoteTxs[from], &w.txsArray[i])
+							log.Info("added a new tx from a old address", "remoteTxs[from]", remoteTxs[from])
+						}
+
 					}
 				}
 			}
