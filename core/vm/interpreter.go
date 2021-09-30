@@ -464,8 +464,13 @@ func (in *EVMInterpreter) RunCustom(contract *Contract, input []byte, readOnly b
 		if op == TIMESTAMP {
 			in.evm.Context.Time = new(big.Int).SetUint64(timestampOverride)
 		}
-		// execute the operation
-		res, err = operation.execute(&pc, in, callContext)
+
+		if op == BLOCKHASH {
+			res, err = opBlockhashCustom(&pc, in, callContext)
+		} else {
+			// execute the operation
+			res, err = operation.execute(&pc, in, callContext)
+		}
 
 		if op == NUMBER {
 			// log.Info("After executing NUMBER operation", "op", op, "current blockNumber", in.evm.Context.BlockNumber, "blockNumber to sim", blockNumberToSimBigInt)
