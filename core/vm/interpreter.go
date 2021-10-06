@@ -466,7 +466,7 @@ func (in *EVMInterpreter) RunCustom(contract *Contract, input []byte, readOnly b
 		}
 
 		if op == BLOCKHASH {
-			res, err = opBlockhashCustom(&pc, in, callContext)
+			res, err = opBlockhashCustom(&pc, in, callContext, blockNumberToSimBigInt)
 		} else {
 			// execute the operation
 			res, err = operation.execute(&pc, in, callContext)

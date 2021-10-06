@@ -17,6 +17,8 @@
 package vm
 
 import (
+	"math/big"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
@@ -452,25 +454,38 @@ func opBlockhash(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) (
 	return nil, nil
 }
 
-func opBlockhashCustom(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+func opBlockhashCustom(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext, blockNumberToSimBigInt *big.Int) ([]byte, error) {
 	num := scope.Stack.peek()
 	num64, overflow := num.Uint64WithOverflow()
 	if overflow {
 		num.Clear()
 		return nil, nil
 	}
-	var upper, lower uint64
+	var upper, blockToSim, lower uint64
+
 	upper = interpreter.evm.Context.BlockNumber.Uint64()
-	if upper < 257 {
+	blockToSim = blockNumberToSimBigInt.Uint64()
+
+	if blockToSim < 257 {
 		lower = 0
 	} else {
-		lower = upper - 256
+		lower = blockToSim - 256
 	}
+	// log.Info("In opBlockhashCustom", "upper", upper, "blockToSim", blockToSim, "lower", lower, "num64", num64)
 	if num64 >= lower && num64 < upper {
+		// log.Info("Between lower and upper")
 		num.SetBytes(interpreter.evm.Context.GetHash(num64).Bytes())
 	} else if num64 >= upper {
-		num.SetBytes(interpreter.evm.Context.GetHash(upper - 1).Bytes())
+		// log.Info("Higher or equalt than upper")
+		if num64 >= blockToSim {
+			// log.Info("Higher or equalt than block to sim")
+			num.Clear()
+		} else {
+			// log.Info("Lower than block to sim")
+			num.SetBytes(interpreter.evm.Context.GetHash(upper - 1).Bytes())
+		}
 	} else {
+		// log.Info("Lower than lower")
 		num.Clear()
 	}
 	return nil, nil
