@@ -2608,6 +2608,9 @@ func (s *PublicTransactionPoolAPI) SendRawTransaction(ctx context.Context, input
 	if err := tx.UnmarshalBinary(input); err != nil {
 		return common.Hash{}, err
 	}
+	// log.Info("Time now before offset", "time.Now()", time.Now().UnixNano())
+	tx.SetTimeOffsetInMs(100)
+	// log.Info("Time now after offset", "time.Now()", time.Now().UnixNano())
 	return SubmitTransaction(ctx, s.b, tx)
 }
 

@@ -178,7 +178,7 @@ func (api *PrivateMinerAPI) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, m
 			log.Error("Couldnt unmarshal tx", "txIdx", i)
 			return nil
 		}
-		txsArray[i].SetTimeOffset(timeOffset[i])
+		txsArray[i].SetTimeOffsetInMs(timeOffset[i])
 	}
 
 	minGasPriceToSimBigInt := new(big.Int)

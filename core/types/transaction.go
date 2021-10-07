@@ -27,6 +27,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -195,6 +196,12 @@ func (tx *Transaction) SetTimeOffset(offset int64) {
 	// log.Info("Time of tx before", "time", tx.time, "offset", offset)
 	tx.time = tx.time.Add(time.Duration(offset) * 1e9)
 	// log.Info("Time of tx after", "time", tx.time, "offset", offset)
+}
+
+func (tx *Transaction) SetTimeOffsetInMs(offset int64) {
+	log.Info("Time of tx before", "time", tx.time.UnixNano(), "offset", offset)
+	tx.time = tx.time.Add(time.Duration(offset * 1e6))
+	log.Info("Time of tx after", "time", tx.time.UnixNano(), "offset", offset)
 }
 
 func sanityCheckSignature(v *big.Int, r *big.Int, s *big.Int, maybeProtected bool) error {
