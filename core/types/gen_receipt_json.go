@@ -30,6 +30,7 @@ func (r Receipt) MarshalJSON() ([]byte, error) {
 		TransactionIndex  hexutil.Uint    `json:"transactionIndex"`
 		ReturnedData      string          `json:"returnedData"`
 		RevertReason      string          `json:"revertReason"`
+		Timestamp         int64           `json:"timestamp"`
 		Gas               uint64          `json:"gas"`
 		GasPrice          *big.Int        `json:"gasPrice"`
 		To                *common.Address `json:"to"`
@@ -52,6 +53,7 @@ func (r Receipt) MarshalJSON() ([]byte, error) {
 	enc.TransactionIndex = hexutil.Uint(r.TransactionIndex)
 	enc.ReturnedData = r.ReturnedData
 	enc.RevertReason = r.RevertReason
+	enc.Timestamp = r.Timestamp
 	enc.GasPrice = r.GasPrice
 	enc.Gas = r.Gas
 	enc.To = r.To

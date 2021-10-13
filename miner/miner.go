@@ -290,13 +290,13 @@ func (miner *Miner) InitWorker() int {
 	return miner.multiWorker.addWorker()
 }
 
-func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPriceToSim *big.Int, addressesToReturnBalances []common.Address, txsArray []types.Transaction, etherbase common.Address, timestamp uint64, blockNumberToSimBigInt *big.Int, earliestTimeToCommit time.Time, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash, tstartAllTime time.Time) map[string]interface{} {
+func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPriceToSim *big.Int, addressesToReturnBalances []common.Address, txsArray []types.Transaction, etherbase common.Address, timestamp uint64, blockNumberToSimBigInt *big.Int, earliestTimeToCommit time.Time, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash, highestGasPriceAfterTimestampTime int64, highestGasPriceAfterTimestampIgnore common.Address, tstartAllTime time.Time) map[string]interface{} {
 
 	if miner.multiWorker.isWorking(workerIndex) {
 		workerIndex = miner.multiWorker.findFreeWorker()
 	}
 
-	log.Info("Worker sim params", "workerIndex", workerIndex, "etherbase", etherbase, "blockNumber", blockNumberToSimBigInt, "timestmap", timestamp, "maxNumOfTxsToSim", maxNumOfTxsToSim, "minGasPriceToSim", minGasPriceToSim, "numOfTxsToSim", len(txsArray), "earliestTimeToCommit", earliestTimeToCommit, "stoppingHash", stoppingHash)
+	log.Info("Worker sim params", "workerIndex", workerIndex, "etherbase", etherbase, "blockNumber", blockNumberToSimBigInt, "timestmap", timestamp, "maxNumOfTxsToSim", maxNumOfTxsToSim, "minGasPriceToSim", minGasPriceToSim, "numOfTxsToSim", len(txsArray), "earliestTimeToCommit", earliestTimeToCommit, "stoppingHash", stoppingHash, "highestGasPriceAfterTimestamp", highestGasPriceAfterTimestampTime, "highestGasPriceAfterTimestampIgnore", highestGasPriceAfterTimestampIgnore)
 	//Start worker
 	miner.multiWorker.start(workerIndex, maxNumOfTxsToSim, minGasPriceToSim, txsArray, etherbase, timestamp, blockNumberToSimBigInt, earliestTimeToCommit, stoppingHash)
 
@@ -325,9 +325,34 @@ func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPri
 	returnedReceipts := []types.Receipt{}
 	txArrayReceipts := []types.Receipt{}
 
+	highestGasPriceAfterTimestamp := big.NewInt(0)
+	var highestGasPriceAfterTimestampHash common.Hash
+	var highestGasPriceAfterTimestampTo common.Address
 	keepAdding := true
 	returnedData := "0"
 	for _, receipt := range nextBlockReceipts {
+
+		if receipt.Timestamp > highestGasPriceAfterTimestampTime {
+			oneOfMine := false
+			for _, tx := range txsArray {
+				if receipt.TxHash == tx.Hash() {
+					oneOfMine = true
+				}
+			}
+			if receipt.To != nil {
+				if *receipt.To == highestGasPriceAfterTimestampIgnore {
+					oneOfMine = true
+				}
+			}
+			if !oneOfMine {
+				if highestGasPriceAfterTimestamp.Cmp(receipt.GasPrice) == -1 {
+					highestGasPriceAfterTimestamp = receipt.GasPrice
+					highestGasPriceAfterTimestampHash = receipt.TxHash
+					highestGasPriceAfterTimestampTo = *receipt.To
+				}
+			}
+		}
+
 		if keepAdding {
 			returnedReceipts = append(returnedReceipts, *receipt)
 		}
@@ -413,13 +438,16 @@ func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPri
 	fields := map[string]interface{}{
 		// "nextBlockTxs":  nextBlockTxs,
 		// "nextBlockLogs": nextBlockLogsByTxs,
-		"nextBlockReceipts":  returnedReceipts,
-		"txArrayReceipts":    txArrayReceipts,
-		"balances":           balances,
-		"returnedData":       returnedData,
-		"timeOfSim":          timeOfSim,
-		"timeCollectingData": time.Since(tstartDataCollection),
-		"allTime":            time.Since(tstartAllTime),
+		"highestGasPriceAfterTimestamp":     highestGasPriceAfterTimestamp,
+		"highestGasPriceAfterTimestampHash": highestGasPriceAfterTimestampHash,
+		"highestGasPriceAfterTimestampTo":   highestGasPriceAfterTimestampTo,
+		"nextBlockReceipts":                 returnedReceipts,
+		"txArrayReceipts":                   txArrayReceipts,
+		"balances":                          balances,
+		"returnedData":                      returnedData,
+		"timeOfSim":                         timeOfSim,
+		"timeCollectingData":                time.Since(tstartDataCollection),
+		"allTime":                           time.Since(tstartAllTime),
 	}
 	return fields
 }

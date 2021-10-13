@@ -223,6 +223,8 @@ func applyTransactionCustom(msg types.Message, config *params.ChainConfig, bc Ch
 		receipt.ReturnedData = hexutil.Encode(result.Return())
 	}
 
+	receipt.Timestamp = tx.TimeSeen().UnixNano() / 1e6
+
 	receipt.GasPrice = tx.GasPrice()
 	receipt.Gas = tx.Gas()
 

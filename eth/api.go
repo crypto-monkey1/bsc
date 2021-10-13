@@ -170,7 +170,7 @@ func (api *PrivateMinerAPI) GetNumOfWorkers() int {
 	return api.e.GetNumOfWorkers()
 }
 
-func (api *PrivateMinerAPI) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPriceToSim string, addressesToReturnBalances []common.Address, inputTxs []hexutil.Bytes, timeOffset []int64, etherbase common.Address, timestamp uint64, blockNumber string, earliestTimeToCommit int64, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
+func (api *PrivateMinerAPI) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPriceToSim string, addressesToReturnBalances []common.Address, inputTxs []hexutil.Bytes, timeOffset []int64, etherbase common.Address, timestamp uint64, blockNumber string, earliestTimeToCommit int64, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash, highestGasPriceAfterTimestampTime int64, highestGasPriceAfterTimestampIgnore common.Address) map[string]interface{} {
 	tstartAllTime := time.Now()
 	txsArray := make([]types.Transaction, len(inputTxs))
 	for i, input := range inputTxs {
@@ -194,7 +194,7 @@ func (api *PrivateMinerAPI) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, m
 		log.Error("wasnt able to convert string to big int in ExecuteWork")
 		return nil
 	}
-	return api.e.ExecuteWork(workerIndex, maxNumOfTxsToSim, minGasPriceToSimBigInt, addressesToReturnBalances, txsArray, etherbase, timestamp, blockNumberToSimBigInt, time.Unix(0, earliestTimeToCommit*1e6), stoppingHash, stopReceiptHash, returnedDataHash, tstartAllTime)
+	return api.e.ExecuteWork(workerIndex, maxNumOfTxsToSim, minGasPriceToSimBigInt, addressesToReturnBalances, txsArray, etherbase, timestamp, blockNumberToSimBigInt, time.Unix(0, earliestTimeToCommit*1e6), stoppingHash, stopReceiptHash, returnedDataHash, highestGasPriceAfterTimestampTime, highestGasPriceAfterTimestampIgnore, tstartAllTime)
 }
 
 // SetRecommitInterval updates the interval for miner sealing work recommitting.

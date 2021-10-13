@@ -80,6 +80,8 @@ type Receipt struct {
 	ReturnedData string `json:"returnedData"`
 	RevertReason string `json:"revertReason"`
 
+	Timestamp int64 `json:"timestamp"`
+
 	Gas      uint64   `json:"gas"`
 	GasPrice *big.Int `json:"gasPrice"`
 
