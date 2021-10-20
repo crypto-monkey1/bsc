@@ -896,18 +896,18 @@ func (w *worker) updateSnapshot() {
 	w.snapshotState = w.current.state.Copy()
 }
 
-func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Address) ([]*types.Log, error) {
+func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Address, receiptProcessors ...core.ReceiptProcessor) ([]*types.Log, error) {
 	snap := w.current.state.Snapshot()
 	var receipt *types.Receipt
 	var err error
 	if w.isCustomWork {
-		receipt, err = core.ApplyTransactionCostumHeader(w.chainConfig, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, *w.chain.GetVMConfig(), w.blockNumberToSimBigInt, w.timestamp)
+		receipt, err = core.ApplyTransactionCostumHeader(w.chainConfig, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, *w.chain.GetVMConfig(), w.blockNumberToSimBigInt, w.timestamp, receiptProcessors...)
 		if err != nil {
 			w.current.state.RevertToSnapshot(snap)
 			return nil, err
 		}
 	} else {
-		receipt, err = core.ApplyTransaction(w.chainConfig, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, *w.chain.GetVMConfig())
+		receipt, err = core.ApplyTransaction(w.chainConfig, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, *w.chain.GetVMConfig(), receiptProcessors...)
 		if err != nil {
 			w.current.state.RevertToSnapshot(snap)
 			return nil, err
@@ -944,6 +944,13 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 	stopCommit := false
 	// log.Info("Before commiting txs loop", "workerIdx", w.index)
 	// LOOP:
+
+	processorCapacity := 100
+	if txs.CurrentSize() < processorCapacity {
+		processorCapacity = txs.CurrentSize()
+	}
+	bloomProcessors := core.NewAsyncReceiptBloomGenerator(processorCapacity)
+
 	for {
 		// In the following three cases, we will interrupt the execution of the transaction.
 		// (1) new head block event arrival, the interrupt signal is 1
@@ -1020,7 +1027,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		// Start executing the transaction
 		w.current.state.Prepare(tx.Hash(), common.Hash{}, w.current.tcount)
 		// log.Info("Before commmiting tx", "workerIndex", w.index, "from", from, "tx.Hash()", tx.Hash())
-		logs, err := w.commitTransaction(tx, coinbase)
+		logs, err := w.commitTransaction(tx, coinbase, bloomProcessors)
 		// if time.Since(startTime) > 1e9 {
 		// 	log.Info("Too much time has passed", "workerIndex", w.index, "time", time.Since(startTime), "from", from, "tx.Hash()", tx.Hash())
 		// 	return true
@@ -1063,6 +1070,8 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		}
 	}
 	// log.Info("after commiting txs loop", "workerIdx", w.index)
+	bloomProcessors.Close()
+
 	if (!w.isRunning() && len(coalescedLogs) > 0) || (w.isRunning() && w.isCustomWork) {
 		// We don't push the pendingLogsEvent while we are mining. The reason is that
 		// when we are mining, the worker will regenerate a mining block every 3 seconds.
@@ -1306,13 +1315,4 @@ func (w *worker) postSideBlock(event core.ChainSideEvent) {
 	case w.chainSideCh <- event:
 	case <-w.exitCh:
 	}
-}
-
-// totalFees computes total consumed fees in ETH. Block transactions and receipts have to have the same order.
-func totalFees(block *types.Block, receipts []*types.Receipt) *big.Float {
-	feesWei := new(big.Int)
-	for i, tx := range block.Transactions() {
-		feesWei.Add(feesWei, new(big.Int).Mul(new(big.Int).SetUint64(receipts[i].GasUsed), tx.GasPrice()))
-	}
-	return new(big.Float).Quo(new(big.Float).SetInt(feesWei), new(big.Float).SetInt(big.NewInt(params.Ether)))
 }
