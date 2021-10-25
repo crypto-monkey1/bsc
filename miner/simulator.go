@@ -77,6 +77,7 @@ type Simulator struct {
 	timeBlockReceived   time.Time
 	simLogger           *logrus.Logger
 	simLoggerPath       string
+	minimumGasPrice     *big.Int
 }
 
 func NewSimulator(eth Backend, chainConfig *params.ChainConfig, config *Config, ethAPI *ethapi.PublicBlockChainAPI, simEtherbase common.Address, signTxFn SignerTxFn) *Simulator {
@@ -101,6 +102,7 @@ func NewSimulator(eth Backend, chainConfig *params.ChainConfig, config *Config, 
 		simualtingNextState: false,
 		SimualtingOnState:   false,
 		simLogger:           logrus.New(),
+		minimumGasPrice:     big.NewInt(5000000000), //Set to 5gwei
 	}
 	path, err := os.Getwd()
 	if err != nil {
@@ -198,7 +200,7 @@ func (simulator *Simulator) simulateNextState() {
 	}
 
 	if len(pending) != 0 {
-		txs := types.NewTransactionsByPriceAndNonceForSimulator(env.signer, pending, env.timeBlockReceived, simulator.timeOffset, true)
+		txs := types.NewTransactionsByPriceAndNonceForSimulator(env.signer, pending, env.timeBlockReceived, simulator.timeOffset, true, simulator.minimumGasPrice)
 		if simulator.commitTransactions(env, txs, env.header.Number, common.Hash{}) {
 			log.Error("Simulator: Something went wrong with commitTransactions")
 			return
@@ -292,7 +294,7 @@ func (simulator *Simulator) SimulateOnCurrentState(addressesToReturnBalances []c
 	}
 
 	if len(pending) != 0 {
-		txs := types.NewTransactionsByPriceAndNonceForSimulator(env.signer, pending, simulator.currentEnv.timeBlockReceived, simulator.timeOffset, false)
+		txs := types.NewTransactionsByPriceAndNonceForSimulator(env.signer, pending, simulator.currentEnv.timeBlockReceived, simulator.timeOffset, false, simulator.minimumGasPrice)
 		if simulator.commitTransactions(env, txs, env.header.Number, stoppingHash) {
 			log.Error("Simulator: Something went wrong with commitTransactions")
 			return nil
@@ -436,7 +438,7 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 		}
 	}
 	if len(x2Pending) != 0 {
-		txs := types.NewTransactionsByPriceAndNonceForSimulator(x2Env.signer, x2Pending, x2Env.timeBlockReceived, simulator.timeOffset, true)
+		txs := types.NewTransactionsByPriceAndNonceForSimulator(x2Env.signer, x2Pending, x2Env.timeBlockReceived, simulator.timeOffset, true, simulator.minimumGasPrice)
 		if simulator.commitTransactions(x2Env, txs, x2Env.header.Number, common.Hash{}) {
 			log.Error("Simulator: Something went wrong with commitTransactions")
 			return nil
@@ -528,7 +530,7 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 	}
 
 	if len(x3Pending) != 0 {
-		txs := types.NewTransactionsByPriceAndNonceForSimulator(x3Env.signer, x3Pending, x2Env.timeBlockReceived, simulator.timeOffset, false)
+		txs := types.NewTransactionsByPriceAndNonceForSimulator(x3Env.signer, x3Pending, x2Env.timeBlockReceived, simulator.timeOffset, false, simulator.minimumGasPrice)
 		if simulator.commitTransactions(x3Env, txs, x3Env.header.Number, stoppingHash) {
 			log.Error("Simulator: Something went wrong with commitTransactions")
 			return nil

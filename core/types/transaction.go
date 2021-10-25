@@ -481,43 +481,47 @@ func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transa
 	}
 }
 
-func NewTransactionsByPriceAndNonceForSimulator(signer Signer, txs map[common.Address]Transactions, timeBlockReceived time.Time, timeOffset time.Duration, timeDurationHigherThanOffset bool) *TransactionsByPriceAndNonce {
+func NewTransactionsByPriceAndNonceForSimulator(signer Signer, txs map[common.Address]Transactions, timeBlockReceived time.Time, timeOffset time.Duration, timeDurationHigherThanOffset bool, minimumGasPrice *big.Int) *TransactionsByPriceAndNonce {
 	// Initialize a price and received time based heap with the head transactions
 
 	heads := make(TxByPriceAndTime, 0, len(txs))
 	for from, accTxs := range txs {
-		accTxsTimeLimited := make(Transactions, 0)
+		accTxsTimeAndPriceLimited := make(Transactions, 0)
 		for i, _ := range accTxs {
+			if accTxs[i].GasPriceIntCmp(minimumGasPrice) < 0 {
+				// log.Info("Dropping tx form pending due to gas price", "txGasPrice", accTxs[i].GasPrice(), "minimumGasPrice", minimumGasPrice)
+				continue
+			}
 			timeFromTxSeenToBlockRecievd := timeBlockReceived.Sub(accTxs[i].TimeSeen())
 			// log.Info("Inpecting tx time", "tx from", from, "tx nonce", accTxs[i].Nonce(), "tx hash", accTxs[i].Hash())
 			// log.Info("Times", "timeFromTxSeenToBlockRecievd", timeFromTxSeenToBlockRecievd, "Tx time", accTxs[i].TimeSeen().UnixNano()/1e6, "block time", timeBlockReceived.UnixNano()/1e6, "timeOffset", timeOffset)
 			if timeDurationHigherThanOffset {
 				if timeFromTxSeenToBlockRecievd >= timeOffset {
 					// log.Info("Higher: Tx got in", "tx from", from, "tx nonce", accTxs[i].Nonce(), "tx hash", accTxs[i].Hash())
-					accTxsTimeLimited = append(accTxsTimeLimited, accTxs[i])
+					accTxsTimeAndPriceLimited = append(accTxsTimeAndPriceLimited, accTxs[i])
 				} else {
 					// log.Info("Higher: Tx didnt got in", "tx from", from, "tx nonce", accTxs[i].Nonce(), "tx hash", accTxs[i].Hash())
 				}
 			} else {
 				if timeFromTxSeenToBlockRecievd < timeOffset {
 					// log.Info("Lower: Tx got in", "tx from", from, "tx nonce", accTxs[i].Nonce(), "tx hash", accTxs[i].Hash())
-					accTxsTimeLimited = append(accTxsTimeLimited, accTxs[i])
+					accTxsTimeAndPriceLimited = append(accTxsTimeAndPriceLimited, accTxs[i])
 				} else {
 					// log.Info("Lower: Tx didnt got in", "tx from", from, "tx nonce", accTxs[i].Nonce(), "tx hash", accTxs[i].Hash())
 				}
 			}
 		}
-		if len(accTxsTimeLimited) == 0 {
+		if len(accTxsTimeAndPriceLimited) == 0 {
 			delete(txs, from)
 			continue
 		}
 		// Ensure the sender address is from the signer
-		if acc, _ := Sender(signer, accTxsTimeLimited[0]); acc != from {
+		if acc, _ := Sender(signer, accTxsTimeAndPriceLimited[0]); acc != from {
 			delete(txs, from)
 			continue
 		}
-		heads = append(heads, accTxsTimeLimited[0])
-		txs[from] = accTxsTimeLimited[1:]
+		heads = append(heads, accTxsTimeAndPriceLimited[0])
+		txs[from] = accTxsTimeAndPriceLimited[1:]
 	}
 	heap.Init(&heads)
 
