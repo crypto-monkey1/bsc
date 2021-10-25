@@ -932,7 +932,11 @@ func (simulator *Simulator) logBlock(block *types.Block, timeBlockReceived time.
 			"timeSeen":       tx.TimeSeen().UnixNano(),
 			"timeSeenPretty": tx.TimeSeen(),
 			"gasPrice":       tx.GasPrice(),
+			"gasLimit":       tx.Gas(),
 			"to":             tx.To(),
+			"nonce":          tx.Nonce(),
+			"value":          tx.Value(),
+			"cost":           tx.Cost(),
 			"minedBlock":     block.NumberU64(),
 		}).Info("Tx summary")
 	}
