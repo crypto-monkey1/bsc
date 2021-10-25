@@ -6,6 +6,7 @@ import (
 	"errors"
 	"math"
 	"math/big"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -28,6 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/trie"
+	"github.com/sirupsen/logrus"
 )
 
 type SignerTxFn func(accounts.Account, *types.Transaction, *big.Int) (*types.Transaction, error)
@@ -73,6 +75,8 @@ type Simulator struct {
 	simualtingNextState bool
 	SimualtingOnState   bool
 	timeBlockReceived   time.Time
+	simLogger           *logrus.Logger
+	simLoggerPath       string
 }
 
 func NewSimulator(eth Backend, chainConfig *params.ChainConfig, config *Config, ethAPI *ethapi.PublicBlockChainAPI, simEtherbase common.Address, signTxFn SignerTxFn) *Simulator {
@@ -96,8 +100,26 @@ func NewSimulator(eth Backend, chainConfig *params.ChainConfig, config *Config, 
 		timeOffset:          time.Duration(offsetInMs * 1e6),
 		simualtingNextState: false,
 		SimualtingOnState:   false,
+		simLogger:           logrus.New(),
 	}
-
+	path, err := os.Getwd()
+	if err != nil {
+		log.Error("Couldnt get current directory path")
+	}
+	path = path + "/../gethSimLogs"
+	log.Info("Creating logs dir", "path", path)
+	err = os.MkdirAll(path, os.ModePerm)
+	if err != nil {
+		log.Error("Couldnt create logs dir")
+	}
+	simulator.simLoggerPath = path + "/simulatedBlocks.log"
+	simulator.simLogger.SetFormatter(&logrus.JSONFormatter{})
+	file, err := os.OpenFile(simulator.simLoggerPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err == nil {
+		simulator.simLogger.Out = file
+	} else {
+		simulator.simLogger.Info("Failed to log to file, using default stderr")
+	}
 	simulator.chainHeadSub = simulator.eth.BlockChain().SubscribeChainHeadEvent(simulator.chainHeadCh)
 	log.Info("Simulator: Initialized")
 	go simulator.mainLoop()
@@ -187,10 +209,11 @@ func (simulator *Simulator) simulateNextState() {
 
 	env.state.StopPrefetcher()
 	env.block = types.NewBlock(env.header, env.txs, nil, env.receipts, trie.NewStackTrie(nil))
+	simulator.logBlock(env.block, env.timeBlockReceived)
+
 	simulator.currentEnv = env
 	procTime := time.Since(tstart)
 	log.Info("Simulator: Finished simulating next state", "blockNumber", env.block.Number(), "txs", len(env.block.Transactions()), "gasUsed", env.block.GasUsed(), "procTime", common.PrettyDuration(procTime))
-
 }
 
 /*********************** Simulating on current state ***********************/
@@ -860,4 +883,55 @@ func (simulator *Simulator) getCurrentValidators(blockHash common.Hash) ([]commo
 		valz[i] = a
 	}
 	return valz, nil
+}
+
+/*********************** Utils ***********************/
+func (simulator *Simulator) logBlock(block *types.Block, timeBlockReceived time.Time) {
+	info, err := os.Stat(simulator.simLoggerPath)
+	if err != nil {
+		log.Error("Unable to read info on logrus file")
+		return
+	}
+
+	currentSizeOfLog := info.Size()
+	if currentSizeOfLog > 1e7 {
+		log.Info("logrus file is larger than 10MB. reseting it")
+		err := os.Remove(simulator.simLoggerPath)
+		if err != nil {
+			log.Error("Unable to delete logrus file")
+		}
+		file, err := os.OpenFile(simulator.simLoggerPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		if err == nil {
+			simulator.simLogger.Out = file
+		} else {
+			simulator.simLogger.Info("Failed to log to file, using default stderr")
+		}
+	}
+	txs := block.Transactions()
+	simulator.simLogger.WithFields(logrus.Fields{
+		"blockNumberSimulated":        block.NumberU64(),
+		"prevBlockTimeRecieved":       timeBlockReceived.UnixNano(),
+		"prevBlockTimeRecievedPretty": timeBlockReceived,
+		"numOfTxs":                    len(txs),
+		"hash":                        block.Hash(),
+		"gasUsed":                     block.GasUsed(),
+		"gasLimit":                    block.GasLimit(),
+		"difficulty":                  block.Difficulty(),
+		"coinbase":                    block.Coinbase(),
+		"timestamp":                   block.Time(),
+	}).Info("Block summary")
+	if len(txs) == 0 {
+		return
+	}
+	for i, tx := range txs {
+		simulator.simLogger.WithFields(logrus.Fields{
+			"txHash":         tx.Hash(),
+			"index":          i,
+			"timeSeen":       tx.TimeSeen().UnixNano(),
+			"timeSeenPretty": tx.TimeSeen(),
+			"gasPrice":       tx.GasPrice(),
+			"to":             tx.To(),
+			"minedBlock":     block.NumberU64(),
+		}).Info("Tx summary")
+	}
 }
