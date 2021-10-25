@@ -454,7 +454,7 @@ func opBlockhash(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) (
 	return nil, nil
 }
 
-func opBlockhashCustom(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext, blockNumberToSimBigInt *big.Int) ([]byte, error) {
+func opBlockhashCustom(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext, blockNumber *big.Int) ([]byte, error) {
 	num := scope.Stack.peek()
 	num64, overflow := num.Uint64WithOverflow()
 	if overflow {
@@ -464,7 +464,7 @@ func opBlockhashCustom(pc *uint64, interpreter *EVMInterpreter, scope *ScopeCont
 	var upper, blockToSim, lower uint64
 
 	upper = interpreter.evm.Context.BlockNumber.Uint64()
-	blockToSim = blockNumberToSimBigInt.Uint64()
+	blockToSim = blockNumber.Uint64()
 
 	if blockToSim < 257 {
 		lower = 0

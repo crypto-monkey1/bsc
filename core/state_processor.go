@@ -495,6 +495,9 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	receipt.BlockHash = statedb.BlockHash()
 	receipt.BlockNumber = header.Number
 	receipt.TransactionIndex = uint(statedb.TxIndex())
+	for _, receiptProcessor := range receiptProcessors {
+		receiptProcessor.Apply(receipt)
+	}
 	return receipt, err
 }
 
@@ -506,6 +509,70 @@ func applyTransactionCustom(msg types.Message, config *params.ChainConfig, bc Ch
 
 	// Apply the transaction to the current state (included in the env).
 	result, err := ApplyMessageCustom(evm, msg, gp, blockNumberToSimBigInt, timestampOverride)
+	if err != nil {
+		return nil, err
+	}
+	// log.Info("After ApplyMessage")
+	// Update the state with pending changes.
+	var root []byte
+	if config.IsByzantium(header.Number) {
+		statedb.Finalise(true)
+	} else {
+		root = statedb.IntermediateRoot(config.IsEIP158(header.Number)).Bytes()
+	}
+	*usedGas += result.UsedGas
+
+	// Create a new receipt for the transaction, storing the intermediate root and gas used
+	// by the tx.
+	receipt := &types.Receipt{Type: tx.Type(), PostState: root, CumulativeGasUsed: *usedGas}
+	if result.Failed() {
+		receipt.Status = types.ReceiptStatusFailed
+	} else {
+		receipt.Status = types.ReceiptStatusSuccessful
+	}
+	receipt.TxHash = tx.Hash()
+	receipt.GasUsed = result.UsedGas
+
+	// If the transaction created a contract, store the creation address in the receipt.
+	if msg.To() == nil {
+		receipt.ContractAddress = crypto.CreateAddress(evm.TxContext.Origin, tx.Nonce())
+	}
+
+	if result.Revert() != nil {
+		reason, _ := abi.UnpackRevert(result.Revert())
+		receipt.RevertReason = reason
+	} else {
+		receipt.ReturnedData = hexutil.Encode(result.Return())
+	}
+
+	receipt.Timestamp = tx.TimeSeen().UnixNano() / 1e6
+
+	receipt.GasPrice = tx.GasPrice()
+	receipt.Gas = tx.Gas()
+
+	receipt.To = tx.To()
+	receipt.Value = tx.Value()
+	receipt.Nonce = tx.Nonce()
+	receipt.Data = tx.Data()
+	// Set the receipt logs and create the bloom filter.
+	receipt.Logs = statedb.GetLogs(tx.Hash())
+	receipt.BlockHash = statedb.BlockHash()
+	receipt.BlockNumber = header.Number
+	receipt.TransactionIndex = uint(statedb.TxIndex())
+	for _, receiptProcessor := range receiptProcessors {
+		receiptProcessor.Apply(receipt)
+	}
+	return receipt, err
+}
+
+func applyTransactionForSimulator(msg types.Message, config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, evm *vm.EVM, blockNumber *big.Int, receiptProcessors ...ReceiptProcessor) (*types.Receipt, error) {
+	// Create a new context to be used in the EVM environment.
+	// log.Info("At applyTransactionCostumHeader")
+	txContext := NewEVMTxContext(msg)
+	evm.Reset(txContext, statedb)
+
+	// Apply the transaction to the current state (included in the env).
+	result, err := ApplyMessageForSimulator(evm, msg, gp, blockNumber)
 	if err != nil {
 		return nil, err
 	}
@@ -603,4 +670,23 @@ func ApplyTransactionCostumHeader(config *params.ChainConfig, bc ChainContext, a
 	}()
 	// vmenv.Context.BlockNumber = blockNumberToSimBigInt
 	return applyTransactionCustom(msg, config, bc, author, gp, statedb, header, tx, usedGas, vmenv, blockNumberToSimBigInt, timestampOverride, receiptProcessors...)
+}
+
+func ApplyTransactionForSimulator(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config, blockNumber *big.Int, receiptProcessors ...ReceiptProcessor) (*types.Receipt, error) {
+	msg, err := tx.AsMessage(types.MakeSigner(config, header.Number))
+	if err != nil {
+		return nil, err
+	}
+	// Create a new context to be used in the EVM environment
+	blockContext := NewEVMBlockContext(header, bc, author)
+	// blockContext.BlockNumber = blockNumberToSimBigInt
+	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, config, cfg)
+
+	defer func() {
+		ite := vmenv.Interpreter()
+		vm.EVMInterpreterPool.Put(ite)
+		vm.EvmPool.Put(vmenv)
+	}()
+	// vmenv.Context.BlockNumber = blockNumberToSimBigInt
+	return applyTransactionForSimulator(msg, config, bc, author, gp, statedb, header, tx, usedGas, vmenv, blockNumber, receiptProcessors...)
 }

@@ -455,6 +455,7 @@ func (f *BlockFetcher) loop() {
 
 		case hash := <-f.done:
 			// A pending import finished, remove all traces of the notification
+			log.Debug("A pending block import finished", "hash", hash)
 			f.forgetHash(hash)
 			f.forgetBlock(hash)
 
@@ -662,6 +663,7 @@ func (f *BlockFetcher) loop() {
 							continue
 						}
 						// Mark the body matched, reassemble if still unknown
+						log.Debug("Recieved block body at block fetcher", "hash", hash)
 						matched = true
 						if f.getBlock(hash) == nil {
 							block := types.NewBlockWithHeader(announce.header).WithBody(task.transactions[i], task.uncles[i])

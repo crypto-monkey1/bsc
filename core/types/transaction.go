@@ -204,6 +204,19 @@ func (tx *Transaction) SetTimeOffsetInMs(offset int64) {
 	log.Info("Time of tx after", "time", tx.time.UnixNano(), "offset", offset)
 }
 
+func (tx *Transaction) SetTimeNowPlusOffset(offset int64) {
+	log.Info("Time of tx before", "time", tx.time.UnixNano())
+	tx.time = time.Now()
+	tx.time = tx.time.Add(time.Duration(offset * 1e6))
+	log.Info("Time of tx after", "time", tx.time.UnixNano())
+}
+
+func (tx *Transaction) SetTime(timeToSet time.Time) {
+	log.Info("Time of tx before", "time", tx.time.UnixNano())
+	tx.time = timeToSet
+	log.Info("Time of tx after", "time", tx.time.UnixNano())
+}
+
 func sanityCheckSignature(v *big.Int, r *big.Int, s *big.Int, maybeProtected bool) error {
 	if isProtectedV(v) && !maybeProtected {
 		return ErrUnexpectedProtection
@@ -468,27 +481,43 @@ func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transa
 	}
 }
 
-func NewTransactionsByPriceAndNonceWithTimeLimit(signer Signer, txs map[common.Address]Transactions, timeLimit time.Time) *TransactionsByPriceAndNonce {
+func NewTransactionsByPriceAndNonceForSimulator(signer Signer, txs map[common.Address]Transactions, timeBlockReceived time.Time, timeOffset time.Duration, timeDurationHigherThanOffset bool) *TransactionsByPriceAndNonce {
 	// Initialize a price and received time based heap with the head transactions
+
 	heads := make(TxByPriceAndTime, 0, len(txs))
 	for from, accTxs := range txs {
-		passed := false
+		accTxsTimeLimited := make(Transactions, 0)
 		for i, _ := range accTxs {
-			if accTxs[i].TimeSeen().After(timeLimit) {
-				passed = true
+			timeFromTxSeenToBlockRecievd := timeBlockReceived.Sub(accTxs[i].TimeSeen())
+			// log.Info("Inpecting tx time", "tx from", from, "tx nonce", accTxs[i].Nonce(), "tx hash", accTxs[i].Hash())
+			// log.Info("Times", "timeFromTxSeenToBlockRecievd", timeFromTxSeenToBlockRecievd, "Tx time", accTxs[i].TimeSeen().UnixNano()/1e6, "block time", timeBlockReceived.UnixNano()/1e6, "timeOffset", timeOffset)
+			if timeDurationHigherThanOffset {
+				if timeFromTxSeenToBlockRecievd >= timeOffset {
+					// log.Info("Higher: Tx got in", "tx from", from, "tx nonce", accTxs[i].Nonce(), "tx hash", accTxs[i].Hash())
+					accTxsTimeLimited = append(accTxsTimeLimited, accTxs[i])
+				} else {
+					// log.Info("Higher: Tx didnt got in", "tx from", from, "tx nonce", accTxs[i].Nonce(), "tx hash", accTxs[i].Hash())
+				}
+			} else {
+				if timeFromTxSeenToBlockRecievd < timeOffset {
+					// log.Info("Lower: Tx got in", "tx from", from, "tx nonce", accTxs[i].Nonce(), "tx hash", accTxs[i].Hash())
+					accTxsTimeLimited = append(accTxsTimeLimited, accTxs[i])
+				} else {
+					// log.Info("Lower: Tx didnt got in", "tx from", from, "tx nonce", accTxs[i].Nonce(), "tx hash", accTxs[i].Hash())
+				}
 			}
 		}
-		if !passed {
+		if len(accTxsTimeLimited) == 0 {
 			delete(txs, from)
 			continue
 		}
 		// Ensure the sender address is from the signer
-		if acc, _ := Sender(signer, accTxs[0]); acc != from {
+		if acc, _ := Sender(signer, accTxsTimeLimited[0]); acc != from {
 			delete(txs, from)
 			continue
 		}
-		heads = append(heads, accTxs[0])
-		txs[from] = accTxs[1:]
+		heads = append(heads, accTxsTimeLimited[0])
+		txs[from] = accTxsTimeLimited[1:]
 	}
 	heap.Init(&heads)
 

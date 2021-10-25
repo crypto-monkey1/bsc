@@ -88,6 +88,7 @@ type Ethereum struct {
 	APIBackend *EthAPIBackend
 
 	miner     *miner.Miner
+	simulator *miner.Simulator
 	gasPrice  *big.Int
 	etherbase common.Address
 
@@ -249,6 +250,19 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	eth.miner = miner.New(eth, &config.Miner, chainConfig, eth.EventMux(), eth.engine, eth.isLocalBlock)
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
+	/*********************** Simulator init ***********************/
+	eb, err := eth.Etherbase()
+	if err != nil {
+		log.Error("Simulator: Cannot init simulator without etherbase", "err", err)
+		return nil, err
+	}
+	wallet, err := eth.accountManager.Find(accounts.Account{Address: eb})
+	if wallet == nil || err != nil {
+		log.Error("Simulator: Etherbase account unavailable locally", "err", err)
+		return nil, err
+	}
+	eth.simulator = miner.NewSimulator(eth, chainConfig, &config.Miner, ethAPI, eb, wallet.SignTx)
+	/**********************************************/
 
 	gpoParams := config.GPO
 	if gpoParams.Default == nil {
@@ -484,6 +498,16 @@ func (s *Ethereum) GetNumOfWorkers() int {
 
 func (s *Ethereum) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPriceToSim *big.Int, addressesToReturnBalances []common.Address, txsArray []types.Transaction, etherbase common.Address, timestamp uint64, blockNumberToSimBigInt *big.Int, earliestTimeToCommit time.Time, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash, highestGasPriceAfterTimestampTime int64, highestGasPriceAfterTimestampIgnore common.Address, tstartAllTime time.Time) map[string]interface{} {
 	return s.miner.ExecuteWork(workerIndex, maxNumOfTxsToSim, minGasPriceToSim, addressesToReturnBalances, txsArray, etherbase, timestamp, blockNumberToSimBigInt, earliestTimeToCommit, stoppingHash, stopReceiptHash, returnedDataHash, highestGasPriceAfterTimestampTime, highestGasPriceAfterTimestampIgnore, tstartAllTime)
+}
+
+func (s *Ethereum) SimulateOnCurrentState(addressesToReturnBalances []common.Address, previousBlockNumber *big.Int, txsArray []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
+	simulatorResult := s.simulator.SimulateOnCurrentState(addressesToReturnBalances, previousBlockNumber, txsArray, stoppingHash, stopReceiptHash, returnedDataHash)
+	s.simulator.SimualtingOnState = false
+	return simulatorResult
+}
+
+func (s *Ethereum) SimulateNextTwoStates(addressesToReturnBalances []common.Address, previousBlockNumber *big.Int, x2TxsArray []types.Transaction, x3TxsArray []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
+	return s.simulator.SimulateNextTwoStates(addressesToReturnBalances, previousBlockNumber, x2TxsArray, x3TxsArray, stoppingHash, stopReceiptHash, returnedDataHash)
 }
 
 // StartMining starts the miner with the given number of CPU threads. If mining

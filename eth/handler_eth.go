@@ -86,6 +86,7 @@ func (h *ethHandler) Handle(peer *eth.Peer, packet eth.Packet) error {
 
 	case *eth.NewBlockHashesPacket:
 		hashes, numbers := packet.Unpack()
+		log.Debug("Recieved new block hash packet in handler_eth", "hashes", hashes, "numbers", numbers)
 		return h.handleBlockAnnounces(peer, hashes, numbers)
 
 	case *eth.NewBlockPacket:

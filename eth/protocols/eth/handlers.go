@@ -308,7 +308,7 @@ func handleNewBlock(backend Backend, msg Decoder, peer *Peer) error {
 
 	// Mark the peer as owning the block
 	peer.markBlock(ann.Block.Hash())
-
+	log.Debug("Recieved new block at handleNewBlock", "hash", ann.Block.Hash())
 	return backend.Handle(peer, ann)
 }
 

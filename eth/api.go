@@ -197,6 +197,35 @@ func (api *PrivateMinerAPI) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, m
 	return api.e.ExecuteWork(workerIndex, maxNumOfTxsToSim, minGasPriceToSimBigInt, addressesToReturnBalances, txsArray, etherbase, timestamp, blockNumberToSimBigInt, time.Unix(0, earliestTimeToCommit*1e6), stoppingHash, stopReceiptHash, returnedDataHash, highestGasPriceAfterTimestampTime, highestGasPriceAfterTimestampIgnore, tstartAllTime)
 }
 
+func (api *PrivateMinerAPI) SimulateOnCurrentState(addressesToReturnBalances []common.Address, previousBlockNumber *big.Int, inputTxs []hexutil.Bytes, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
+	txsArray := make([]types.Transaction, len(inputTxs))
+	for i, input := range inputTxs {
+		if err := txsArray[i].UnmarshalBinary(input); err != nil {
+			log.Error("Simulator: Couldnt unmarshal tx", "txIdx", i)
+			return nil
+		}
+	}
+	return api.e.SimulateOnCurrentState(addressesToReturnBalances, previousBlockNumber, txsArray, stoppingHash, stopReceiptHash, returnedDataHash)
+}
+
+func (api *PrivateMinerAPI) SimulateNextTwoStates(addressesToReturnBalances []common.Address, previousBlockNumber *big.Int, x2InputTxs []hexutil.Bytes, x3InputTxs []hexutil.Bytes, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
+	x2TxsArray := make([]types.Transaction, len(x2InputTxs))
+	for i, input := range x2InputTxs {
+		if err := x2TxsArray[i].UnmarshalBinary(input); err != nil {
+			log.Error("Simulator: Couldnt unmarshal tx", "txIdx", i)
+			return nil
+		}
+	}
+	x3TxsArray := make([]types.Transaction, len(x3InputTxs))
+	for i, input := range x3InputTxs {
+		if err := x3TxsArray[i].UnmarshalBinary(input); err != nil {
+			log.Error("Simulator: Couldnt unmarshal tx", "txIdx", i)
+			return nil
+		}
+	}
+	return api.e.SimulateNextTwoStates(addressesToReturnBalances, previousBlockNumber, x2TxsArray, x3TxsArray, stoppingHash, stopReceiptHash, returnedDataHash)
+}
+
 // SetRecommitInterval updates the interval for miner sealing work recommitting.
 func (api *PrivateMinerAPI) SetRecommitInterval(interval int) {
 	api.e.Miner().SetRecommitInterval(time.Duration(interval) * time.Millisecond)

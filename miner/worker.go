@@ -421,7 +421,7 @@ func (w *worker) startMulti(maxNumOfTxsToSim int, minGasPriceToSim *big.Int, txs
 	w.timestamp = timestamp
 	w.blockNumberToSimBigInt = blockNumberToSimBigInt
 
-	// log.Info("Before commiting new work", "workerIndex", w.index)
+	// log.Info("startMulti", "etherbase", etherbase, "w.coinbase", w.coinbase)
 
 	atomic.StoreInt32(&w.running, 1)
 
@@ -832,6 +832,7 @@ func (w *worker) makeCurrent(parent *types.Block, header *types.Header) error {
 		uncles:    mapset.NewSet(),
 		header:    header,
 	}
+	log.Info("In commitNewWork", "env.header.Coinbase", env.header.Coinbase, "header.Coinbase", header.Coinbase)
 	// Keep track of transactions which return errors so they can be removed
 	env.tcount = 0
 
@@ -1121,6 +1122,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 			return
 		}
 		header.Coinbase = w.coinbase
+		log.Info("In commitNewWork1", "w.coinbase", w.coinbase, "header.Coinbase", header.Coinbase)
 		// log.Info("Switching coinbase")
 		// header.Coinbase = common.HexToAddress("0x3679479c2402e921db00923E014CD439c606C596")
 	}
@@ -1128,6 +1130,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		log.Error("Failed to prepare header for mining", "err", err)
 		return
 	}
+	log.Info("In commitNewWork2", "w.coinbase", w.coinbase, "header.Coinbase", header.Coinbase)
 	// If we are care about TheDAO hard-fork check whether to override the extra-data or not
 	if daoBlock := w.chainConfig.DAOForkBlock; daoBlock != nil {
 		// Check whether the block is among the fork extra-override range
@@ -1141,12 +1144,14 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 			}
 		}
 	}
+	log.Info("In commitNewWork3", "w.coinbase", w.coinbase, "header.Coinbase", header.Coinbase)
 	// Could potentially happen if starting to mine in an odd state.
 	err := w.makeCurrent(parent, header)
 	if err != nil {
 		log.Error("Failed to create mining context", "err", err)
 		return
 	}
+	log.Info("In commitNewWork", "w.current.header.Coinbase", w.current.header.Coinbase, "header.Coinbase", header.Coinbase)
 	// Create the current work task and check any fork transitions needed
 	env := w.current
 	if w.chainConfig.DAOForkSupport && w.chainConfig.DAOForkBlock != nil && w.chainConfig.DAOForkBlock.Cmp(header.Number) == 0 {
@@ -1288,6 +1293,10 @@ func (w *worker) commitCustom(uncles []*types.Header, interval func(), update bo
 	if err != nil {
 		return err
 	}
+	log.Info("Checking Block last tx", "w.current.tcount", w.current.tcount, "blockTxs", len(block.Transactions()), "last tx gp", block.Transactions()[len(block.Transactions())-1].GasPrice(),
+		"last tx ", block.Transactions()[len(block.Transactions())-1].To())
+	log.Info("Checking Block before last tx", "w.current.tcount", w.current.tcount, "blockTxs", len(block.Transactions()), "last tx gp", block.Transactions()[len(block.Transactions())-2].GasPrice(),
+		"last tx ", block.Transactions()[len(block.Transactions())-2].To())
 	w.timeOfLastCommit = time.Now()
 	w.unconfirmed.Shift(block.NumberU64() - 1)
 	log.Info("Commit new mining work", "number", block.Number(), "workerIdx", w.index, "sealhash", w.engine.SealHash(block.Header()),
