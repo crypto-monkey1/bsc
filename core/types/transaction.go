@@ -481,17 +481,17 @@ func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transa
 	}
 }
 
-func NewTransactionsByPriceAndNonceForSimulator(signer Signer, txs map[common.Address]Transactions, timeBlockReceived time.Time, timeOffset time.Duration, timeDurationHigherThanOffset bool, minimumGasPrice *big.Int) *TransactionsByPriceAndNonce {
+func NewTransactionsByPriceAndNonceForSimulator(signer Signer, txs map[common.Address]Transactions, timeBlockReceived time.Time, timeOffset time.Duration, timeDurationHigherThanOffset bool) *TransactionsByPriceAndNonce {
 	// Initialize a price and received time based heap with the head transactions
 
 	heads := make(TxByPriceAndTime, 0, len(txs))
 	for from, accTxs := range txs {
 		accTxsTimeAndPriceLimited := make(Transactions, 0)
 		for i, _ := range accTxs {
-			if accTxs[i].GasPriceIntCmp(minimumGasPrice) < 0 {
-				// log.Info("Dropping tx form pending due to gas price", "txGasPrice", accTxs[i].GasPrice(), "minimumGasPrice", minimumGasPrice)
-				continue
-			}
+			// if accTxs[i].GasPriceIntCmp(minimumGasPrice) < 0 {
+			// 	// log.Info("Dropping tx form pending due to gas price", "txGasPrice", accTxs[i].GasPrice(), "minimumGasPrice", minimumGasPrice)
+			// 	continue
+			// }
 			timeFromTxSeenToBlockRecievd := timeBlockReceived.Sub(accTxs[i].TimeSeen())
 			// log.Info("Inpecting tx time", "tx from", from, "tx nonce", accTxs[i].Nonce(), "tx hash", accTxs[i].Hash())
 			// log.Info("Times", "timeFromTxSeenToBlockRecievd", timeFromTxSeenToBlockRecievd, "Tx time", accTxs[i].TimeSeen().UnixNano()/1e6, "block time", timeBlockReceived.UnixNano()/1e6, "timeOffset", timeOffset)

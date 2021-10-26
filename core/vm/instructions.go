@@ -446,10 +446,13 @@ func opBlockhash(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) (
 	} else {
 		lower = upper - 256
 	}
+	// log.Info("block hash op", "num64", num64, "upper", upper, "lower", lower)
 	if num64 >= lower && num64 < upper {
 		num.SetBytes(interpreter.evm.Context.GetHash(num64).Bytes())
+		// log.Info("set to real hash", "num", num)
 	} else {
 		num.Clear()
+		// log.Info("set to zero hash", "num", num)
 	}
 	return nil, nil
 }

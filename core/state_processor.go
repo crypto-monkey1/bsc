@@ -672,21 +672,18 @@ func ApplyTransactionCostumHeader(config *params.ChainConfig, bc ChainContext, a
 	return applyTransactionCustom(msg, config, bc, author, gp, statedb, header, tx, usedGas, vmenv, blockNumberToSimBigInt, timestampOverride, receiptProcessors...)
 }
 
-func ApplyTransactionForSimulator(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config, blockNumber *big.Int, receiptProcessors ...ReceiptProcessor) (*types.Receipt, error) {
+func ApplyTransactionForSimulator(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, prevHeader *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config, receiptProcessors ...ReceiptProcessor) (*types.Receipt, error) {
 	msg, err := tx.AsMessage(types.MakeSigner(config, header.Number))
 	if err != nil {
 		return nil, err
 	}
 	// Create a new context to be used in the EVM environment
-	blockContext := NewEVMBlockContext(header, bc, author)
-	// blockContext.BlockNumber = blockNumberToSimBigInt
+	blockContext := NewEVMBlockContextForSimulator(header, bc, author, prevHeader)
 	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, config, cfg)
-
 	defer func() {
 		ite := vmenv.Interpreter()
 		vm.EVMInterpreterPool.Put(ite)
 		vm.EvmPool.Put(vmenv)
 	}()
-	// vmenv.Context.BlockNumber = blockNumberToSimBigInt
-	return applyTransactionForSimulator(msg, config, bc, author, gp, statedb, header, tx, usedGas, vmenv, blockNumber, receiptProcessors...)
+	return applyTransaction(msg, config, bc, author, gp, statedb, header, tx, usedGas, vmenv, receiptProcessors...)
 }
