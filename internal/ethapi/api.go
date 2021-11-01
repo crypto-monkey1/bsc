@@ -2606,9 +2606,9 @@ func (args *SendTxArgs) toTransaction() *types.Transaction {
 func SubmitTransaction(ctx context.Context, b Backend, tx *types.Transaction) (common.Hash, error) {
 	// If the transaction fee cap is already specified, ensure the
 	// fee of the given transaction is _reasonable_.
-	if err := checkTxFee(tx.GasPrice(), tx.Gas(), b.RPCTxFeeCap()); err != nil {
-		return common.Hash{}, err
-	}
+	// if err := checkTxFee(tx.GasPrice(), tx.Gas(), b.RPCTxFeeCap()); err != nil {
+	// 	return common.Hash{}, err
+	// }
 	if !b.UnprotectedAllowed() && !tx.Protected() {
 		// Ensure only eip155 signed transactions are submitted if EIP155Required is set.
 		return common.Hash{}, errors.New("only replay-protected (EIP-155) transactions allowed over RPC")
