@@ -506,6 +506,12 @@ func (s *Ethereum) SimulateOnCurrentState(addressesToReturnBalances []common.Add
 	return simulatorResult
 }
 
+func (s *Ethereum) SimulateOnCurrentStateSingleForGasUsage(previousBlockNumber *big.Int, tx *types.Transaction) map[string]interface{} {
+	simulatorResult := s.simulator.SimulateOnCurrentStateSingleForGasUsage(previousBlockNumber, tx)
+	s.simulator.SimualtingOnState = false
+	return simulatorResult
+}
+
 func (s *Ethereum) SimulateNextTwoStates(addressesToReturnBalances []common.Address, previousBlockNumber *big.Int, x2TxsArray []types.Transaction, x3TxsArray []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
 	return s.simulator.SimulateNextTwoStates(addressesToReturnBalances, previousBlockNumber, x2TxsArray, x3TxsArray, stoppingHash, stopReceiptHash, returnedDataHash)
 }

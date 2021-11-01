@@ -220,18 +220,22 @@ func (simulator *Simulator) simulateNextState() {
 func (simulator *Simulator) SimulateOnCurrentState(addressesToReturnBalances []common.Address, previousBlockNumber *big.Int, txsToInject []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
 
 	log.Info("Simulator: New SimulateOnCurrentState call. checking if simulator is free...", "simualtingOnState", simulator.SimualtingOnState, "simualtingNextState", simulator.simualtingNextState)
-	for {
-		if simulator.simualtingNextState || simulator.SimualtingOnState {
-			time.Sleep(10 * time.Millisecond)
-		} else {
-			break
+	if simulator.simualtingNextState || simulator.SimualtingOnState {
+		log.Warn("Simulator: Busy simulating")
+		return map[string]interface{}{
+			"currentStateNotReady": true,
+			"wrongBlock":           false,
 		}
 	}
+
 	currentBlock := simulator.chain.CurrentBlock()
 	currentBlockNum := currentBlock.Number()
 	if currentBlockNum.Cmp(previousBlockNumber) != 0 {
 		log.Warn("Simulator: Wrong block", "currentGethBlock", currentBlockNum, "wantedBlock", previousBlockNumber)
-		return nil
+		return map[string]interface{}{
+			"currentStateNotReady": false,
+			"wrongBlock":           true,
+		}
 	}
 	simulator.SimualtingOnState = true
 
@@ -339,10 +343,88 @@ func (simulator *Simulator) SimulateOnCurrentState(addressesToReturnBalances []c
 	}
 
 	simulatorResult := map[string]interface{}{
-		"nextBlockReceipts": returnedReceipts,
-		"txArrayReceipts":   txArrayReceipts,
-		"balances":          balances,
-		"returnedData":      returnedData,
+		"nextBlockReceipts":    returnedReceipts,
+		"txArrayReceipts":      txArrayReceipts,
+		"balances":             balances,
+		"returnedData":         returnedData,
+		"currentStateNotReady": false,
+		"wrongBlock":           false,
+	}
+
+	return simulatorResult
+}
+
+/*********************** Simulating on current state single tx for gas usage***********************/
+func (simulator *Simulator) SimulateOnCurrentStateSingleForGasUsage(previousBlockNumber *big.Int, tx *types.Transaction) map[string]interface{} {
+
+	log.Info("Simulator: New SimulateOnCurrentStateSingleForGasUsage call. checking if simulator is free...", "simualtingNextState", simulator.simualtingNextState)
+	if simulator.simualtingNextState || simulator.SimualtingOnState {
+		log.Warn("Simulator: Busy simulating")
+		return map[string]interface{}{
+			"currentStateNotReady": true,
+			"wrongBlock":           false,
+		}
+	}
+
+	currentBlock := simulator.chain.CurrentBlock()
+	currentBlockNum := currentBlock.Number()
+	if currentBlockNum.Cmp(previousBlockNumber) != 0 {
+		log.Warn("Simulator: Wrong block", "currentGethBlock", currentBlockNum, "wantedBlock", previousBlockNumber)
+		return map[string]interface{}{
+			"currentStateNotReady": false,
+			"wrongBlock":           true,
+		}
+	}
+	simulator.SimualtingOnState = true
+
+	tstart := time.Now()
+
+	log.Info("Simulator: Starting to simulate on top of current state")
+	parent := simulator.currentEnv.block
+	num := parent.Number()
+	header := &types.Header{
+		ParentHash: parent.Hash(),
+		Number:     num.Add(num, common.Big1),
+		GasLimit:   core.CalcGasLimit(parent, simulator.config.GasFloor, simulator.config.GasCeil),
+		Time:       parent.Time() + 3, //FIXME:Need to take it from config for future changes...
+		Difficulty: big.NewInt(2),
+	}
+	state := simulator.currentEnv.state.Copy()
+	nextValidator := simulator.currentEnv.validators[(parent.NumberU64()+1)%uint64(len(simulator.currentEnv.validators))]
+	log.Info("Simulator: Got next validator", "currentValidator", parent.Coinbase(), "currentDifficulty", parent.Difficulty(), "nextValidator", nextValidator)
+	header.Coinbase = nextValidator
+	env := &simEnvironment{
+		signer:    types.MakeSigner(simulator.chainConfig, header.Number),
+		state:     state,
+		ancestors: mapset.NewSet(),
+		family:    mapset.NewSet(),
+		uncles:    mapset.NewSet(),
+		header:    header,
+	}
+	// Keep track of transactions which return errors so they can be removed
+	env.tcount = 0
+
+	env.gasPool = new(core.GasPool).AddGas(env.header.GasLimit)
+	env.gasPool.SubGas(params.SystemTxsGas)
+
+	processorCapacity := 1
+	bloomProcessors := core.NewAsyncReceiptBloomGenerator(processorCapacity)
+
+	env.state.Prepare(tx.Hash(), common.Hash{}, env.tcount)
+	receipt, err := core.ApplyTransactionForSimulator(simulator.chainConfig, simulator.chain, &env.header.Coinbase, env.gasPool, env.state, env.header, simulator.currentEnv.header, tx, &env.header.GasUsed, *simulator.chain.GetVMConfig(), bloomProcessors)
+	if err != nil {
+		log.Error("Simulator: Failed Apply tx", "err", err)
+		return nil
+	}
+	bloomProcessors.Close()
+
+	procTime := time.Since(tstart)
+	log.Info("Simulator: Finished simulating single tx on current state", "blockNumber", env.header.Number, "gasUsed", receipt.GasUsed, "procTime", common.PrettyDuration(procTime))
+
+	simulatorResult := map[string]interface{}{
+		"receipt":              receipt,
+		"currentStateNotReady": false,
+		"wrongBlock":           false,
 	}
 
 	return simulatorResult

@@ -208,6 +208,15 @@ func (api *PrivateMinerAPI) SimulateOnCurrentState(addressesToReturnBalances []c
 	return api.e.SimulateOnCurrentState(addressesToReturnBalances, previousBlockNumber, txsArray, stoppingHash, stopReceiptHash, returnedDataHash)
 }
 
+func (api *PrivateMinerAPI) SimulateOnCurrentStateSingleForGasUsage(previousBlockNumber *big.Int, inputTx hexutil.Bytes) map[string]interface{} {
+	tx := &types.Transaction{}
+	if err := tx.UnmarshalBinary(inputTx); err != nil {
+		log.Error("Simulator: Couldnt unmarshal tx", "err", err)
+		return nil
+	}
+	return api.e.SimulateOnCurrentStateSingleForGasUsage(previousBlockNumber, tx)
+}
+
 func (api *PrivateMinerAPI) SimulateNextTwoStates(addressesToReturnBalances []common.Address, previousBlockNumber *big.Int, x2InputTxs []hexutil.Bytes, x3InputTxs []hexutil.Bytes, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
 	x2TxsArray := make([]types.Transaction, len(x2InputTxs))
 	for i, input := range x2InputTxs {
