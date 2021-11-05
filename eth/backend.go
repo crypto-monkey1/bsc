@@ -506,8 +506,14 @@ func (s *Ethereum) SimulateOnCurrentState(addressesToReturnBalances []common.Add
 	return simulatorResult
 }
 
-func (s *Ethereum) SimulateOnCurrentStateSingleForGasUsage(previousBlockNumber *big.Int, tx *types.Transaction) map[string]interface{} {
-	simulatorResult := s.simulator.SimulateOnCurrentStateSingleForGasUsage(previousBlockNumber, tx)
+func (s *Ethereum) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, previousBlockNumber *big.Int, priorityTx *types.Transaction, txsArray []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
+	simulatorResult := s.simulator.SimulateOnCurrentStatePriority(addressesToReturnBalances, previousBlockNumber, priorityTx, txsArray, stoppingHash, returnedDataHash)
+	s.simulator.SimualtingOnState = false
+	return simulatorResult
+}
+
+func (s *Ethereum) SimulateOnCurrentStateSingleTx(previousBlockNumber *big.Int, tx *types.Transaction) map[string]interface{} {
+	simulatorResult := s.simulator.SimulateOnCurrentStateSingleTx(previousBlockNumber, tx)
 	s.simulator.SimualtingOnState = false
 	return simulatorResult
 }

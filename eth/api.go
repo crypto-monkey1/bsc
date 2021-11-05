@@ -197,6 +197,22 @@ func (api *PrivateMinerAPI) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, m
 	return api.e.ExecuteWork(workerIndex, maxNumOfTxsToSim, minGasPriceToSimBigInt, addressesToReturnBalances, txsArray, etherbase, timestamp, blockNumberToSimBigInt, time.Unix(0, earliestTimeToCommit*1e6), stoppingHash, stopReceiptHash, returnedDataHash, highestGasPriceAfterTimestampTime, highestGasPriceAfterTimestampIgnore, tstartAllTime)
 }
 
+func (api *PrivateMinerAPI) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, previousBlockNumber *big.Int, inputPriority hexutil.Bytes, inputTxs []hexutil.Bytes, stoppingHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
+	txsArray := make([]types.Transaction, len(inputTxs))
+	for i, input := range inputTxs {
+		if err := txsArray[i].UnmarshalBinary(input); err != nil {
+			log.Error("Simulator: Couldnt unmarshal tx", "txIdx", i)
+			return nil
+		}
+	}
+	priorityTx := &types.Transaction{}
+	if err := priorityTx.UnmarshalBinary(inputPriority); err != nil {
+		log.Error("Simulator: Couldnt unmarshal priority tx", "err", err)
+		return nil
+	}
+	return api.e.SimulateOnCurrentStatePriority(addressesToReturnBalances, previousBlockNumber, priorityTx, txsArray, stoppingHash, returnedDataHash)
+}
+
 func (api *PrivateMinerAPI) SimulateOnCurrentState(addressesToReturnBalances []common.Address, previousBlockNumber *big.Int, inputTxs []hexutil.Bytes, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
 	txsArray := make([]types.Transaction, len(inputTxs))
 	for i, input := range inputTxs {
@@ -208,13 +224,13 @@ func (api *PrivateMinerAPI) SimulateOnCurrentState(addressesToReturnBalances []c
 	return api.e.SimulateOnCurrentState(addressesToReturnBalances, previousBlockNumber, txsArray, stoppingHash, stopReceiptHash, returnedDataHash)
 }
 
-func (api *PrivateMinerAPI) SimulateOnCurrentStateSingleForGasUsage(previousBlockNumber *big.Int, inputTx hexutil.Bytes) map[string]interface{} {
+func (api *PrivateMinerAPI) SimulateOnCurrentStateSingleTx(previousBlockNumber *big.Int, inputTx hexutil.Bytes) map[string]interface{} {
 	tx := &types.Transaction{}
 	if err := tx.UnmarshalBinary(inputTx); err != nil {
 		log.Error("Simulator: Couldnt unmarshal tx", "err", err)
 		return nil
 	}
-	return api.e.SimulateOnCurrentStateSingleForGasUsage(previousBlockNumber, tx)
+	return api.e.SimulateOnCurrentStateSingleTx(previousBlockNumber, tx)
 }
 
 func (api *PrivateMinerAPI) SimulateNextTwoStates(addressesToReturnBalances []common.Address, previousBlockNumber *big.Int, x2InputTxs []hexutil.Bytes, x3InputTxs []hexutil.Bytes, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {

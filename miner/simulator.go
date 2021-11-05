@@ -143,7 +143,9 @@ func (simulator *Simulator) mainLoop() {
 			simulator.currentEnv = &simEnvironment{}
 			simulator.simulateNextState()
 			simulator.simualtingNextState = false
+
 		}
+
 	}
 }
 
@@ -199,7 +201,7 @@ func (simulator *Simulator) simulateNextState() {
 
 	if len(pending) != 0 {
 		txs := types.NewTransactionsByPriceAndNonceForSimulator(env.signer, pending, env.timeBlockReceived, simulator.timeOffset, true)
-		if simulator.commitTransactions(env, txs, nil, common.Hash{}) {
+		if simulator.commitTransactions(env, txs, nil, nil, common.Hash{}) {
 			log.Error("Simulator: Something went wrong with commitTransactions")
 			return
 		}
@@ -217,10 +219,147 @@ func (simulator *Simulator) simulateNextState() {
 }
 
 /*********************** Simulating on current state ***********************/
+func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, previousBlockNumber *big.Int, priorityTx *types.Transaction, txsToInject []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
+
+	log.Info("Simulator: New SimulateOnCurrentStatePriority call. checking if simulator is free...", "simualtingOnState", simulator.SimualtingOnState, "simualtingNextState", simulator.simualtingNextState)
+	if simulator.simualtingNextState {
+		log.Warn("Simulator: Busy simulating")
+		return map[string]interface{}{
+			"currentStateNotReady": true,
+			"wrongBlock":           false,
+		}
+	}
+
+	currentBlock := simulator.chain.CurrentBlock()
+	currentBlockNum := currentBlock.Number()
+	if currentBlockNum.Cmp(previousBlockNumber) != 0 {
+		log.Warn("Simulator: Wrong block", "currentGethBlock", currentBlockNum, "wantedBlock", previousBlockNumber)
+		return map[string]interface{}{
+			"currentStateNotReady": false,
+			"wrongBlock":           true,
+		}
+	}
+	simulator.SimualtingOnState = true
+
+	tstart := time.Now()
+
+	log.Info("Simulator: Starting to simulate on top of current state")
+	parent := simulator.currentEnv.block
+	num := parent.Number()
+	header := &types.Header{
+		ParentHash: parent.Hash(),
+		Number:     num.Add(num, common.Big1),
+		GasLimit:   core.CalcGasLimit(parent, simulator.config.GasFloor, simulator.config.GasCeil),
+		Time:       parent.Time() + 3, //FIXME:Need to take it from config for future changes...
+		Difficulty: big.NewInt(2),
+	}
+	state := simulator.currentEnv.state.Copy()
+	nextValidator := simulator.currentEnv.validators[(parent.NumberU64()+1)%uint64(len(simulator.currentEnv.validators))]
+	log.Info("Simulator: Got next validator", "currentValidator", parent.Coinbase(), "currentDifficulty", parent.Difficulty(), "nextValidator", nextValidator)
+	header.Coinbase = nextValidator
+	env := &simEnvironment{
+		signer:    types.MakeSigner(simulator.chainConfig, header.Number),
+		state:     state,
+		ancestors: mapset.NewSet(),
+		family:    mapset.NewSet(),
+		uncles:    mapset.NewSet(),
+		header:    header,
+	}
+	env.state.StartPrefetcher("miner")
+	// Keep track of transactions which return errors so they can be removed
+	env.tcount = 0
+
+	pending, err := simulator.eth.TxPool().Pending()
+	if err != nil {
+		log.Error("Simulator: Failed to fetch pending transactions", "err", err)
+		return nil
+	}
+
+	//Inject txs
+	if len(txsToInject) > 0 {
+		fromPriority, _ := types.Sender(env.signer, priorityTx)
+		delete(pending, fromPriority)
+		for i, _ := range txsToInject {
+			from, _ := types.Sender(env.signer, &txsToInject[i])
+			delete(pending, from)
+		}
+		for i, _ := range txsToInject {
+			//Set time of sending to now in order for it to be sorted last
+			txsToInject[i].SetTimeNowPlusOffset(100)
+			from, _ := types.Sender(env.signer, &txsToInject[i])
+			if len(pending[from]) == 0 {
+				txsArray := make(types.Transactions, 0, 1)
+				txsArray = append(txsArray, &txsToInject[i])
+				pending[from] = txsArray
+				log.Info("Simulator: Injected a tx to pending (first tx from)", "from", from, "hash", txsToInject[i].Hash())
+			} else {
+				pending[from] = append(pending[from], &txsToInject[i])
+				log.Info("Simulator: Injected a tx to pending (from exist in pending)", "from", from, "hash", txsToInject[i].Hash())
+			}
+		}
+	}
+
+	if len(pending) != 0 {
+		txs := types.NewTransactionsByPriceAndNonceForSimulator(env.signer, pending, simulator.currentEnv.timeBlockReceived, simulator.timeOffset, false)
+		if simulator.commitTransactions(env, txs, priorityTx, simulator.currentEnv.header, stoppingHash) {
+			log.Error("Simulator: Something went wrong with commitTransactions")
+			return nil
+		}
+	}
+
+	env.state.StopPrefetcher()
+	env.block = types.NewBlock(env.header, env.txs, nil, env.receipts, trie.NewStackTrie(nil))
+	procTime := time.Since(tstart)
+	log.Info("Simulator: Finished simulating on current state", "blockNumber", env.block.Number(), "txs", len(env.block.Transactions()), "gasUsed", env.block.GasUsed(), "procTime", common.PrettyDuration(procTime))
+
+	//Process output
+	//get balances
+	balances := make([]*big.Int, len(addressesToReturnBalances))
+	for idx, address := range addressesToReturnBalances {
+		balances[idx] = env.state.GetBalance(address)
+	}
+
+	//get receipts
+	txArrayReceipts := []types.Receipt{}
+
+	highestGasPrice := big.NewInt(0)
+	returnedData := "0"
+	for i, receipt := range env.receipts {
+
+		if receipt.TxHash == priorityTx.Hash() {
+			txArrayReceipts = append(txArrayReceipts, *receipt)
+			highestGasPrice = env.receipts[i+1].GasPrice
+		}
+
+		if receipt.TxHash == returnedDataHash {
+			returnedData = receipt.ReturnedData
+		}
+
+		for _, tx := range txsToInject {
+			if receipt.TxHash == tx.Hash() {
+				txArrayReceipts = append(txArrayReceipts, *receipt)
+			}
+		}
+
+	}
+
+	simulatorResult := map[string]interface{}{
+		"highestGasPrice":      highestGasPrice,
+		"txArrayReceipts":      txArrayReceipts,
+		"balances":             balances,
+		"returnedData":         returnedData,
+		"currentStateNotReady": false,
+		"wrongBlock":           false,
+	}
+
+	return simulatorResult
+}
+
+/*********************** Simulating on current state ***********************/
 func (simulator *Simulator) SimulateOnCurrentState(addressesToReturnBalances []common.Address, previousBlockNumber *big.Int, txsToInject []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
 
 	log.Info("Simulator: New SimulateOnCurrentState call. checking if simulator is free...", "simualtingOnState", simulator.SimualtingOnState, "simualtingNextState", simulator.simualtingNextState)
-	if simulator.simualtingNextState || simulator.SimualtingOnState {
+	if simulator.simualtingNextState {
 		log.Warn("Simulator: Busy simulating")
 		return map[string]interface{}{
 			"currentStateNotReady": true,
@@ -297,7 +436,7 @@ func (simulator *Simulator) SimulateOnCurrentState(addressesToReturnBalances []c
 
 	if len(pending) != 0 {
 		txs := types.NewTransactionsByPriceAndNonceForSimulator(env.signer, pending, simulator.currentEnv.timeBlockReceived, simulator.timeOffset, false)
-		if simulator.commitTransactions(env, txs, simulator.currentEnv.header, stoppingHash) {
+		if simulator.commitTransactions(env, txs, nil, simulator.currentEnv.header, stoppingHash) {
 			log.Error("Simulator: Something went wrong with commitTransactions")
 			return nil
 		}
@@ -355,10 +494,10 @@ func (simulator *Simulator) SimulateOnCurrentState(addressesToReturnBalances []c
 }
 
 /*********************** Simulating on current state single tx for gas usage***********************/
-func (simulator *Simulator) SimulateOnCurrentStateSingleForGasUsage(previousBlockNumber *big.Int, tx *types.Transaction) map[string]interface{} {
+func (simulator *Simulator) SimulateOnCurrentStateSingleTx(previousBlockNumber *big.Int, tx *types.Transaction) map[string]interface{} {
 
 	log.Info("Simulator: New SimulateOnCurrentStateSingleForGasUsage call. checking if simulator is free...", "simualtingNextState", simulator.simualtingNextState)
-	if simulator.simualtingNextState || simulator.SimualtingOnState {
+	if simulator.simualtingNextState {
 		log.Warn("Simulator: Busy simulating")
 		return map[string]interface{}{
 			"currentStateNotReady": true,
@@ -519,7 +658,7 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 	}
 	if len(x2Pending) != 0 {
 		txs := types.NewTransactionsByPriceAndNonceForSimulator(x2Env.signer, x2Pending, x2Env.timeBlockReceived, simulator.timeOffset, true)
-		if simulator.commitTransactions(x2Env, txs, nil, common.Hash{}) {
+		if simulator.commitTransactions(x2Env, txs, nil, nil, common.Hash{}) {
 			log.Error("Simulator: Something went wrong with commitTransactions")
 			return nil
 		}
@@ -611,7 +750,7 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 
 	if len(x3Pending) != 0 {
 		txs := types.NewTransactionsByPriceAndNonceForSimulator(x3Env.signer, x3Pending, x2Env.timeBlockReceived, simulator.timeOffset, false)
-		if simulator.commitTransactions(x3Env, txs, x2Env.header, stoppingHash) {
+		if simulator.commitTransactions(x3Env, txs, nil, x2Env.header, stoppingHash) {
 			log.Error("Simulator: Something went wrong with commitTransactions")
 			return nil
 		}
@@ -681,7 +820,7 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 
 /*********************** Building state ***********************/
 
-func (simulator *Simulator) commitTransactions(env *simEnvironment, txs *types.TransactionsByPriceAndNonce, prevHeader *types.Header, stoppingHash common.Hash) bool {
+func (simulator *Simulator) commitTransactions(env *simEnvironment, txs *types.TransactionsByPriceAndNonce, priorityTx *types.Transaction, prevHeader *types.Header, stoppingHash common.Hash) bool {
 	env.gasPool = new(core.GasPool).AddGas(env.header.GasLimit)
 	env.gasPool.SubGas(params.SystemTxsGas)
 
@@ -693,6 +832,18 @@ func (simulator *Simulator) commitTransactions(env *simEnvironment, txs *types.T
 
 	txCount := 0
 	stopCommit := false
+
+	//Simulate priority first
+	if priorityTx != nil {
+		env.state.Prepare(priorityTx.Hash(), common.Hash{}, env.tcount)
+		err := simulator.commitTransaction(env, priorityTx, simulator.currentEnv.header, bloomProcessors)
+		if err != nil {
+			log.Error("Simulator: Something went wrong with commiting priority tx", "error", err)
+			return true
+		}
+		env.tcount++
+		txCount++
+	}
 
 	for {
 		// If we don't have enough gas for any further transactions then we're done
