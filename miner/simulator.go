@@ -220,7 +220,7 @@ func (simulator *Simulator) simulateNextState() {
 
 /*********************** Simulating on current state ***********************/
 func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, blockNumberToSimulate *big.Int, priorityTx *types.Transaction, txsToInject []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
-
+	simulator.SimualtingOnState = true
 	log.Info("Simulator: New SimulateOnCurrentStatePriority call. checking if simulator is free...", "simualtingOnState", simulator.SimualtingOnState, "simualtingNextState", simulator.simualtingNextState)
 
 	var parent *types.Block
@@ -257,7 +257,6 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 	}
 
 	tstart := time.Now()
-	simulator.SimualtingOnState = true
 
 	log.Info("Simulator: Starting to simulate on top of current state")
 
@@ -373,7 +372,7 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 
 /*********************** Simulating on current state ***********************/
 func (simulator *Simulator) SimulateOnCurrentState(addressesToReturnBalances []common.Address, blockNumberToSimulate *big.Int, txsToInject []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
-
+	simulator.SimualtingOnState = true
 	log.Info("Simulator: New SimulateOnCurrentState call. checking if simulator is free...", "simualtingOnState", simulator.SimualtingOnState, "simualtingNextState", simulator.simualtingNextState)
 	var parent *types.Block
 	var state *state.StateDB
@@ -524,7 +523,7 @@ func (simulator *Simulator) SimulateOnCurrentState(addressesToReturnBalances []c
 
 /*********************** Simulating on current state single tx***********************/
 func (simulator *Simulator) SimulateOnCurrentStateSingleTx(blockNumberToSimulate *big.Int, tx *types.Transaction) map[string]interface{} {
-
+	simulator.SimualtingOnState = true
 	log.Info("Simulator: New SimulateOnCurrentStateSingleForGasUsage call. checking if simulator is free...", "simualtingNextState", simulator.simualtingNextState)
 	var parent *types.Block
 	var state *state.StateDB
@@ -558,7 +557,6 @@ func (simulator *Simulator) SimulateOnCurrentStateSingleTx(blockNumberToSimulate
 		log.Warn("Simulator: Current block number is weird", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
 		return nil
 	}
-	simulator.SimualtingOnState = true
 
 	tstart := time.Now()
 
