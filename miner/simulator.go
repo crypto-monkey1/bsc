@@ -219,32 +219,48 @@ func (simulator *Simulator) simulateNextState() {
 }
 
 /*********************** Simulating on current state ***********************/
-func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, previousBlockNumber *big.Int, priorityTx *types.Transaction, txsToInject []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
+func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, blockNumberToSimulate *big.Int, priorityTx *types.Transaction, txsToInject []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
 
 	log.Info("Simulator: New SimulateOnCurrentStatePriority call. checking if simulator is free...", "simualtingOnState", simulator.SimualtingOnState, "simualtingNextState", simulator.simualtingNextState)
-	if simulator.simualtingNextState {
-		log.Warn("Simulator: Busy simulating")
-		return map[string]interface{}{
-			"currentStateNotReady": true,
-			"wrongBlock":           false,
-		}
-	}
 
+	var parent *types.Block
+	var state *state.StateDB
+	var err error
 	currentBlock := simulator.chain.CurrentBlock()
 	currentBlockNum := currentBlock.Number()
-	if currentBlockNum.Cmp(previousBlockNumber) != 0 {
-		log.Warn("Simulator: Wrong block", "currentGethBlock", currentBlockNum, "wantedBlock", previousBlockNumber)
-		return map[string]interface{}{
-			"currentStateNotReady": false,
-			"wrongBlock":           true,
+	oneBlockBeforeSim := new(big.Int)
+	oneBlockBeforeSim = oneBlockBeforeSim.Sub(blockNumberToSimulate, common.Big1)
+	twoBlockBeforeSim := new(big.Int)
+	twoBlockBeforeSim = twoBlockBeforeSim.Sub(oneBlockBeforeSim, common.Big1)
+	if oneBlockBeforeSim.Cmp(currentBlockNum) == 0 {
+		parent = currentBlock
+		state, err = simulator.chain.StateAt(parent.Root())
+		if err != nil {
+			log.Error("Simulator: Failed to create simulator context", "err", err)
+			return nil
 		}
+	} else if twoBlockBeforeSim.Cmp(currentBlockNum) == 0 {
+		if simulator.simualtingNextState {
+			log.Warn("Simulator: Busy simulating next state", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
+			return nil
+		}
+		if oneBlockBeforeSim.Cmp(simulator.currentEnv.block.Number()) == 0 {
+			parent = simulator.currentEnv.block
+			state = simulator.currentEnv.state.Copy()
+		} else {
+			log.Warn("Simulator: not busy, but simulated next state is not compatible with block to simulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
+			return nil
+		}
+	} else {
+		log.Warn("Simulator: Current block number is weird", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
+		return nil
 	}
-	simulator.SimualtingOnState = true
 
 	tstart := time.Now()
+	simulator.SimualtingOnState = true
 
 	log.Info("Simulator: Starting to simulate on top of current state")
-	parent := simulator.currentEnv.block
+
 	num := parent.Number()
 	header := &types.Header{
 		ParentHash: parent.Hash(),
@@ -253,7 +269,7 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 		Time:       parent.Time() + 3, //FIXME:Need to take it from config for future changes...
 		Difficulty: big.NewInt(2),
 	}
-	state := simulator.currentEnv.state.Copy()
+
 	nextValidator := simulator.currentEnv.validators[(parent.NumberU64()+1)%uint64(len(simulator.currentEnv.validators))]
 	log.Info("Simulator: Got next validator", "currentValidator", parent.Coinbase(), "currentDifficulty", parent.Difficulty(), "nextValidator", nextValidator)
 	header.Coinbase = nextValidator
@@ -356,32 +372,46 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 }
 
 /*********************** Simulating on current state ***********************/
-func (simulator *Simulator) SimulateOnCurrentState(addressesToReturnBalances []common.Address, previousBlockNumber *big.Int, txsToInject []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
+func (simulator *Simulator) SimulateOnCurrentState(addressesToReturnBalances []common.Address, blockNumberToSimulate *big.Int, txsToInject []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
 
 	log.Info("Simulator: New SimulateOnCurrentState call. checking if simulator is free...", "simualtingOnState", simulator.SimualtingOnState, "simualtingNextState", simulator.simualtingNextState)
-	if simulator.simualtingNextState {
-		log.Warn("Simulator: Busy simulating")
-		return map[string]interface{}{
-			"currentStateNotReady": true,
-			"wrongBlock":           false,
-		}
-	}
-
+	var parent *types.Block
+	var state *state.StateDB
+	var err error
 	currentBlock := simulator.chain.CurrentBlock()
 	currentBlockNum := currentBlock.Number()
-	if currentBlockNum.Cmp(previousBlockNumber) != 0 {
-		log.Warn("Simulator: Wrong block", "currentGethBlock", currentBlockNum, "wantedBlock", previousBlockNumber)
-		return map[string]interface{}{
-			"currentStateNotReady": false,
-			"wrongBlock":           true,
+	oneBlockBeforeSim := new(big.Int)
+	oneBlockBeforeSim = oneBlockBeforeSim.Sub(blockNumberToSimulate, common.Big1)
+	twoBlockBeforeSim := new(big.Int)
+	twoBlockBeforeSim = twoBlockBeforeSim.Sub(oneBlockBeforeSim, common.Big1)
+	if oneBlockBeforeSim.Cmp(currentBlockNum) == 0 {
+		parent = currentBlock
+		state, err = simulator.chain.StateAt(parent.Root())
+		if err != nil {
+			log.Error("Simulator: Failed to create simulator context", "err", err)
+			return nil
 		}
+	} else if twoBlockBeforeSim.Cmp(currentBlockNum) == 0 {
+		if simulator.simualtingNextState {
+			log.Warn("Simulator: Busy simulating next state", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
+			return nil
+		}
+		if oneBlockBeforeSim.Cmp(simulator.currentEnv.block.Number()) == 0 {
+			parent = simulator.currentEnv.block
+			state = simulator.currentEnv.state.Copy()
+		} else {
+			log.Warn("Simulator: not busy, but simulated next state is not compatible with block to simulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
+			return nil
+		}
+	} else {
+		log.Warn("Simulator: Current block number is weird", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
+		return nil
 	}
 	simulator.SimualtingOnState = true
 
 	tstart := time.Now()
 
 	log.Info("Simulator: Starting to simulate on top of current state")
-	parent := simulator.currentEnv.block
 	num := parent.Number()
 	header := &types.Header{
 		ParentHash: parent.Hash(),
@@ -390,7 +420,6 @@ func (simulator *Simulator) SimulateOnCurrentState(addressesToReturnBalances []c
 		Time:       parent.Time() + 3, //FIXME:Need to take it from config for future changes...
 		Difficulty: big.NewInt(2),
 	}
-	state := simulator.currentEnv.state.Copy()
 	nextValidator := simulator.currentEnv.validators[(parent.NumberU64()+1)%uint64(len(simulator.currentEnv.validators))]
 	log.Info("Simulator: Got next validator", "currentValidator", parent.Coinbase(), "currentDifficulty", parent.Difficulty(), "nextValidator", nextValidator)
 	header.Coinbase = nextValidator
@@ -493,33 +522,47 @@ func (simulator *Simulator) SimulateOnCurrentState(addressesToReturnBalances []c
 	return simulatorResult
 }
 
-/*********************** Simulating on current state single tx for gas usage***********************/
-func (simulator *Simulator) SimulateOnCurrentStateSingleTx(previousBlockNumber *big.Int, tx *types.Transaction) map[string]interface{} {
+/*********************** Simulating on current state single tx***********************/
+func (simulator *Simulator) SimulateOnCurrentStateSingleTx(blockNumberToSimulate *big.Int, tx *types.Transaction) map[string]interface{} {
 
 	log.Info("Simulator: New SimulateOnCurrentStateSingleForGasUsage call. checking if simulator is free...", "simualtingNextState", simulator.simualtingNextState)
-	if simulator.simualtingNextState {
-		log.Warn("Simulator: Busy simulating")
-		return map[string]interface{}{
-			"currentStateNotReady": true,
-			"wrongBlock":           false,
-		}
-	}
-
+	var parent *types.Block
+	var state *state.StateDB
+	var err error
 	currentBlock := simulator.chain.CurrentBlock()
 	currentBlockNum := currentBlock.Number()
-	if currentBlockNum.Cmp(previousBlockNumber) != 0 {
-		log.Warn("Simulator: Wrong block", "currentGethBlock", currentBlockNum, "wantedBlock", previousBlockNumber)
-		return map[string]interface{}{
-			"currentStateNotReady": false,
-			"wrongBlock":           true,
+	oneBlockBeforeSim := new(big.Int)
+	oneBlockBeforeSim = oneBlockBeforeSim.Sub(blockNumberToSimulate, common.Big1)
+	twoBlockBeforeSim := new(big.Int)
+	twoBlockBeforeSim = twoBlockBeforeSim.Sub(oneBlockBeforeSim, common.Big1)
+	if oneBlockBeforeSim.Cmp(currentBlockNum) == 0 {
+		parent = currentBlock
+		state, err = simulator.chain.StateAt(parent.Root())
+		if err != nil {
+			log.Error("Simulator: Failed to create simulator context", "err", err)
+			return nil
 		}
+	} else if twoBlockBeforeSim.Cmp(currentBlockNum) == 0 {
+		if simulator.simualtingNextState {
+			log.Warn("Simulator: Busy simulating next state", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
+			return nil
+		}
+		if oneBlockBeforeSim.Cmp(simulator.currentEnv.block.Number()) == 0 {
+			parent = simulator.currentEnv.block
+			state = simulator.currentEnv.state.Copy()
+		} else {
+			log.Warn("Simulator: not busy, but simulated next state is not compatible with block to simulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
+			return nil
+		}
+	} else {
+		log.Warn("Simulator: Current block number is weird", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
+		return nil
 	}
 	simulator.SimualtingOnState = true
 
 	tstart := time.Now()
 
 	log.Info("Simulator: Starting to simulate on top of current state")
-	parent := simulator.currentEnv.block
 	num := parent.Number()
 	header := &types.Header{
 		ParentHash: parent.Hash(),
@@ -528,7 +571,6 @@ func (simulator *Simulator) SimulateOnCurrentStateSingleTx(previousBlockNumber *
 		Time:       parent.Time() + 3, //FIXME:Need to take it from config for future changes...
 		Difficulty: big.NewInt(2),
 	}
-	state := simulator.currentEnv.state.Copy()
 	nextValidator := simulator.currentEnv.validators[(parent.NumberU64()+1)%uint64(len(simulator.currentEnv.validators))]
 	log.Info("Simulator: Got next validator", "currentValidator", parent.Coinbase(), "currentDifficulty", parent.Difficulty(), "nextValidator", nextValidator)
 	header.Coinbase = nextValidator
@@ -571,25 +613,25 @@ func (simulator *Simulator) SimulateOnCurrentStateSingleTx(previousBlockNumber *
 
 /*********************** Simulate costum next two states  ***********************/
 
-func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []common.Address, previousBlockNumber *big.Int, x2TxsToInject []types.Transaction, x3TxsToInject []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
+func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []common.Address, x1BlockNumber *big.Int, x2TxsToInject []types.Transaction, x3TxsToInject []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
 	//Phase0: make sure we have the right block (x+1)
 	tstart := time.Now()
 	log.Info("Simulator: Starting to simulate next two states", "timeReceivedX+1", simulator.timeBlockReceived, "timeNow", time.Now())
-	x1Block := simulator.chain.CurrentBlock()
-	x1Num := x1Block.Number()
-	if x1Num.Cmp(previousBlockNumber) != 0 {
-		log.Warn("Simulator: Wrong block", "currentGethBlock", x1Num, "wantedBlock", previousBlockNumber)
+	currentBlock := simulator.chain.CurrentBlock()
+	currentBlockNumber := currentBlock.Number()
+	if currentBlockNumber.Cmp(x1BlockNumber) != 0 {
+		log.Warn("Simulator: Wrong block", "currentGethBlock", currentBlockNumber, "wantedBlock", x1BlockNumber)
 		return nil
 	}
 	//Phase1: simulate next state (x+2) without specific txs
 	x2Header := &types.Header{
-		ParentHash: x1Block.Hash(),
-		Number:     x1Num.Add(x1Num, common.Big1),
-		GasLimit:   core.CalcGasLimit(x1Block, simulator.config.GasFloor, simulator.config.GasCeil),
-		Time:       x1Block.Time() + 3, //FIXME:Need to take it from config for future changes...
+		ParentHash: currentBlock.Hash(),
+		Number:     x1BlockNumber.Add(x1BlockNumber, common.Big1),
+		GasLimit:   core.CalcGasLimit(currentBlock, simulator.config.GasFloor, simulator.config.GasCeil),
+		Time:       currentBlock.Time() + 3, //FIXME:Need to take it from config for future changes...
 		Difficulty: big.NewInt(2),
 	}
-	x2State, err := simulator.chain.StateAt(x1Block.Root())
+	x2State, err := simulator.chain.StateAt(currentBlock.Root())
 	if err != nil {
 		log.Error("Simulator: Failed to create simulator context", "err", err)
 		return nil
@@ -608,15 +650,15 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 	// Keep track of transactions which return errors so they can be removed
 	x2Env.tcount = 0
 
-	x2Env.validators, err = simulator.getCurrentValidators(x1Block.Hash())
+	x2Env.validators, err = simulator.getCurrentValidators(currentBlock.Hash())
 	if err != nil {
 		log.Error("Simulator: Failed to get current validators set", "err", err)
 		return nil
 	}
 	sort.Sort(validatorsAscending(x2Env.validators))
 	log.Info("Simulator: Got validators set", "validators", x2Env.validators)
-	x2Validator := x2Env.validators[(x1Block.NumberU64()+1)%uint64(len(x2Env.validators))]
-	log.Info("Simulator: Got next validator", "currentValidator", x1Block.Coinbase(), "currentDifficulty", x1Block.Difficulty(), "x2Validator", x2Validator)
+	x2Validator := x2Env.validators[(currentBlock.NumberU64()+1)%uint64(len(x2Env.validators))]
+	log.Info("Simulator: Got next validator", "currentValidator", currentBlock.Coinbase(), "currentDifficulty", currentBlock.Difficulty(), "x2Validator", x2Validator)
 	x2Header.Coinbase = x2Validator
 
 	x2Pending, err := simulator.eth.TxPool().Pending()

@@ -500,26 +500,26 @@ func (s *Ethereum) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPric
 	return s.miner.ExecuteWork(workerIndex, maxNumOfTxsToSim, minGasPriceToSim, addressesToReturnBalances, txsArray, etherbase, timestamp, blockNumberToSimBigInt, earliestTimeToCommit, stoppingHash, stopReceiptHash, returnedDataHash, highestGasPriceAfterTimestampTime, highestGasPriceAfterTimestampIgnore, tstartAllTime)
 }
 
-func (s *Ethereum) SimulateOnCurrentState(addressesToReturnBalances []common.Address, previousBlockNumber *big.Int, txsArray []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
-	simulatorResult := s.simulator.SimulateOnCurrentState(addressesToReturnBalances, previousBlockNumber, txsArray, stoppingHash, stopReceiptHash, returnedDataHash)
+func (s *Ethereum) SimulateOnCurrentState(addressesToReturnBalances []common.Address, blockNumberToSimulate *big.Int, txsArray []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
+	simulatorResult := s.simulator.SimulateOnCurrentState(addressesToReturnBalances, blockNumberToSimulate, txsArray, stoppingHash, stopReceiptHash, returnedDataHash)
 	s.simulator.SimualtingOnState = false
 	return simulatorResult
 }
 
-func (s *Ethereum) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, previousBlockNumber *big.Int, priorityTx *types.Transaction, txsArray []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
-	simulatorResult := s.simulator.SimulateOnCurrentStatePriority(addressesToReturnBalances, previousBlockNumber, priorityTx, txsArray, stoppingHash, returnedDataHash)
+func (s *Ethereum) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, blockNumberToSimulate *big.Int, priorityTx *types.Transaction, txsArray []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
+	simulatorResult := s.simulator.SimulateOnCurrentStatePriority(addressesToReturnBalances, blockNumberToSimulate, priorityTx, txsArray, stoppingHash, returnedDataHash)
 	s.simulator.SimualtingOnState = false
 	return simulatorResult
 }
 
-func (s *Ethereum) SimulateOnCurrentStateSingleTx(previousBlockNumber *big.Int, tx *types.Transaction) map[string]interface{} {
-	simulatorResult := s.simulator.SimulateOnCurrentStateSingleTx(previousBlockNumber, tx)
+func (s *Ethereum) SimulateOnCurrentStateSingleTx(blockNumberToSimulate *big.Int, tx *types.Transaction) map[string]interface{} {
+	simulatorResult := s.simulator.SimulateOnCurrentStateSingleTx(blockNumberToSimulate, tx)
 	s.simulator.SimualtingOnState = false
 	return simulatorResult
 }
 
-func (s *Ethereum) SimulateNextTwoStates(addressesToReturnBalances []common.Address, previousBlockNumber *big.Int, x2TxsArray []types.Transaction, x3TxsArray []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
-	return s.simulator.SimulateNextTwoStates(addressesToReturnBalances, previousBlockNumber, x2TxsArray, x3TxsArray, stoppingHash, stopReceiptHash, returnedDataHash)
+func (s *Ethereum) SimulateNextTwoStates(addressesToReturnBalances []common.Address, x1BlockNumber *big.Int, x2TxsArray []types.Transaction, x3TxsArray []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
+	return s.simulator.SimulateNextTwoStates(addressesToReturnBalances, x1BlockNumber, x2TxsArray, x3TxsArray, stoppingHash, stopReceiptHash, returnedDataHash)
 }
 
 // StartMining starts the miner with the given number of CPU threads. If mining

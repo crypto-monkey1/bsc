@@ -197,7 +197,7 @@ func (api *PrivateMinerAPI) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, m
 	return api.e.ExecuteWork(workerIndex, maxNumOfTxsToSim, minGasPriceToSimBigInt, addressesToReturnBalances, txsArray, etherbase, timestamp, blockNumberToSimBigInt, time.Unix(0, earliestTimeToCommit*1e6), stoppingHash, stopReceiptHash, returnedDataHash, highestGasPriceAfterTimestampTime, highestGasPriceAfterTimestampIgnore, tstartAllTime)
 }
 
-func (api *PrivateMinerAPI) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, previousBlockNumber *big.Int, inputPriority hexutil.Bytes, inputTxs []hexutil.Bytes, stoppingHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
+func (api *PrivateMinerAPI) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, blockNumberToSimulate *big.Int, inputPriority hexutil.Bytes, inputTxs []hexutil.Bytes, stoppingHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
 	txsArray := make([]types.Transaction, len(inputTxs))
 	for i, input := range inputTxs {
 		if err := txsArray[i].UnmarshalBinary(input); err != nil {
@@ -210,10 +210,10 @@ func (api *PrivateMinerAPI) SimulateOnCurrentStatePriority(addressesToReturnBala
 		log.Error("Simulator: Couldnt unmarshal priority tx", "err", err)
 		return nil
 	}
-	return api.e.SimulateOnCurrentStatePriority(addressesToReturnBalances, previousBlockNumber, priorityTx, txsArray, stoppingHash, returnedDataHash)
+	return api.e.SimulateOnCurrentStatePriority(addressesToReturnBalances, blockNumberToSimulate, priorityTx, txsArray, stoppingHash, returnedDataHash)
 }
 
-func (api *PrivateMinerAPI) SimulateOnCurrentState(addressesToReturnBalances []common.Address, previousBlockNumber *big.Int, inputTxs []hexutil.Bytes, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
+func (api *PrivateMinerAPI) SimulateOnCurrentState(addressesToReturnBalances []common.Address, blockNumberToSimulate *big.Int, inputTxs []hexutil.Bytes, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
 	txsArray := make([]types.Transaction, len(inputTxs))
 	for i, input := range inputTxs {
 		if err := txsArray[i].UnmarshalBinary(input); err != nil {
@@ -221,19 +221,19 @@ func (api *PrivateMinerAPI) SimulateOnCurrentState(addressesToReturnBalances []c
 			return nil
 		}
 	}
-	return api.e.SimulateOnCurrentState(addressesToReturnBalances, previousBlockNumber, txsArray, stoppingHash, stopReceiptHash, returnedDataHash)
+	return api.e.SimulateOnCurrentState(addressesToReturnBalances, blockNumberToSimulate, txsArray, stoppingHash, stopReceiptHash, returnedDataHash)
 }
 
-func (api *PrivateMinerAPI) SimulateOnCurrentStateSingleTx(previousBlockNumber *big.Int, inputTx hexutil.Bytes) map[string]interface{} {
+func (api *PrivateMinerAPI) SimulateOnCurrentStateSingleTx(blockNumberToSimulate *big.Int, inputTx hexutil.Bytes) map[string]interface{} {
 	tx := &types.Transaction{}
 	if err := tx.UnmarshalBinary(inputTx); err != nil {
 		log.Error("Simulator: Couldnt unmarshal tx", "err", err)
 		return nil
 	}
-	return api.e.SimulateOnCurrentStateSingleTx(previousBlockNumber, tx)
+	return api.e.SimulateOnCurrentStateSingleTx(blockNumberToSimulate, tx)
 }
 
-func (api *PrivateMinerAPI) SimulateNextTwoStates(addressesToReturnBalances []common.Address, previousBlockNumber *big.Int, x2InputTxs []hexutil.Bytes, x3InputTxs []hexutil.Bytes, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
+func (api *PrivateMinerAPI) SimulateNextTwoStates(addressesToReturnBalances []common.Address, x1BlockNumber *big.Int, x2InputTxs []hexutil.Bytes, x3InputTxs []hexutil.Bytes, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
 	x2TxsArray := make([]types.Transaction, len(x2InputTxs))
 	for i, input := range x2InputTxs {
 		if err := x2TxsArray[i].UnmarshalBinary(input); err != nil {
@@ -248,7 +248,7 @@ func (api *PrivateMinerAPI) SimulateNextTwoStates(addressesToReturnBalances []co
 			return nil
 		}
 	}
-	return api.e.SimulateNextTwoStates(addressesToReturnBalances, previousBlockNumber, x2TxsArray, x3TxsArray, stoppingHash, stopReceiptHash, returnedDataHash)
+	return api.e.SimulateNextTwoStates(addressesToReturnBalances, x1BlockNumber, x2TxsArray, x3TxsArray, stoppingHash, stopReceiptHash, returnedDataHash)
 }
 
 // SetRecommitInterval updates the interval for miner sealing work recommitting.
