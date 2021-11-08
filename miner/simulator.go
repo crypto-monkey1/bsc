@@ -54,8 +54,6 @@ type simEnvironment struct {
 	block *types.Block
 
 	timeBlockReceived time.Time
-
-	validators []common.Address
 }
 
 type Simulator struct {
@@ -77,6 +75,7 @@ type Simulator struct {
 	timeBlockReceived   time.Time
 	simLogger           *logrus.Logger
 	simLoggerPath       string
+	validators          []common.Address
 }
 
 func NewSimulator(eth Backend, chainConfig *params.ChainConfig, config *Config, ethAPI *ethapi.PublicBlockChainAPI, simEtherbase common.Address, signTxFn SignerTxFn) *Simulator {
@@ -182,14 +181,14 @@ func (simulator *Simulator) simulateNextState() {
 	// Keep track of transactions which return errors so they can be removed
 	env.tcount = 0
 
-	env.validators, err = simulator.getCurrentValidators(parent.Hash())
+	simulator.validators, err = simulator.getCurrentValidators(parent.Hash())
 	if err != nil {
 		log.Error("Simulator: Failed to get current validators set", "err", err)
 		return
 	}
-	sort.Sort(validatorsAscending(env.validators))
-	log.Info("Simulator: Got validators set", "validators", env.validators)
-	nextValidator := env.validators[(parent.NumberU64()+1)%uint64(len(env.validators))]
+	sort.Sort(validatorsAscending(simulator.validators))
+	log.Info("Simulator: Got validators set", "validators", simulator.validators)
+	nextValidator := simulator.validators[(parent.NumberU64()+1)%uint64(len(simulator.validators))]
 	log.Info("Simulator: Got next validator", "currentValidator", parent.Coinbase(), "currentDifficulty", parent.Difficulty(), "nextValidator", nextValidator)
 	header.Coinbase = nextValidator
 
@@ -226,6 +225,7 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 	var parent *types.Block
 	var state *state.StateDB
 	var err error
+	var timeBlockReceived time.Time
 	currentBlock := simulator.chain.CurrentBlock()
 	currentBlockNum := currentBlock.Number()
 	oneBlockBeforeSim := new(big.Int)
@@ -235,6 +235,8 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 	if oneBlockBeforeSim.Cmp(currentBlockNum) == 0 {
 		parent = currentBlock
 		state, err = simulator.chain.StateAt(parent.Root())
+		timeBlockReceived = time.Time{}
+		log.Info("Simulator: SimulateOnCurrentStatePriority, One block before simulation", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
 		if err != nil {
 			log.Error("Simulator: Failed to create simulator context", "err", err)
 			return nil
@@ -247,6 +249,8 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 		if oneBlockBeforeSim.Cmp(simulator.currentEnv.block.Number()) == 0 {
 			parent = simulator.currentEnv.block
 			state = simulator.currentEnv.state.Copy()
+			timeBlockReceived = simulator.currentEnv.timeBlockReceived
+			log.Info("Simulator: SimulateOnCurrentStatePriority, Two block before simulation", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
 		} else {
 			log.Warn("Simulator: not busy, but simulated next state is not compatible with block to simulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
 			return nil
@@ -269,7 +273,7 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 		Difficulty: big.NewInt(2),
 	}
 
-	nextValidator := simulator.currentEnv.validators[(parent.NumberU64()+1)%uint64(len(simulator.currentEnv.validators))]
+	nextValidator := simulator.validators[(parent.NumberU64()+1)%uint64(len(simulator.validators))]
 	log.Info("Simulator: Got next validator", "currentValidator", parent.Coinbase(), "currentDifficulty", parent.Difficulty(), "nextValidator", nextValidator)
 	header.Coinbase = nextValidator
 	env := &simEnvironment{
@@ -315,8 +319,8 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 	}
 
 	if len(pending) != 0 {
-		txs := types.NewTransactionsByPriceAndNonceForSimulator(env.signer, pending, simulator.currentEnv.timeBlockReceived, simulator.timeOffset, false)
-		if simulator.commitTransactions(env, txs, priorityTx, simulator.currentEnv.header, stoppingHash) {
+		txs := types.NewTransactionsByPriceAndNonceForSimulator(env.signer, pending, timeBlockReceived, simulator.timeOffset, false)
+		if simulator.commitTransactions(env, txs, priorityTx, parent.Header(), stoppingHash) {
 			log.Error("Simulator: Something went wrong with commitTransactions")
 			return nil
 		}
@@ -377,6 +381,7 @@ func (simulator *Simulator) SimulateOnCurrentState(addressesToReturnBalances []c
 	var parent *types.Block
 	var state *state.StateDB
 	var err error
+	var timeBlockReceived time.Time
 	currentBlock := simulator.chain.CurrentBlock()
 	currentBlockNum := currentBlock.Number()
 	oneBlockBeforeSim := new(big.Int)
@@ -386,6 +391,8 @@ func (simulator *Simulator) SimulateOnCurrentState(addressesToReturnBalances []c
 	if oneBlockBeforeSim.Cmp(currentBlockNum) == 0 {
 		parent = currentBlock
 		state, err = simulator.chain.StateAt(parent.Root())
+		timeBlockReceived = time.Time{}
+		log.Info("Simulator: SimulateOnCurrentState, One block before simulation", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
 		if err != nil {
 			log.Error("Simulator: Failed to create simulator context", "err", err)
 			return nil
@@ -398,6 +405,8 @@ func (simulator *Simulator) SimulateOnCurrentState(addressesToReturnBalances []c
 		if oneBlockBeforeSim.Cmp(simulator.currentEnv.block.Number()) == 0 {
 			parent = simulator.currentEnv.block
 			state = simulator.currentEnv.state.Copy()
+			timeBlockReceived = simulator.currentEnv.timeBlockReceived
+			log.Info("Simulator: SimulateOnCurrentState, Two block before simulation", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
 		} else {
 			log.Warn("Simulator: not busy, but simulated next state is not compatible with block to simulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
 			return nil
@@ -406,7 +415,6 @@ func (simulator *Simulator) SimulateOnCurrentState(addressesToReturnBalances []c
 		log.Warn("Simulator: Current block number is weird", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
 		return nil
 	}
-	simulator.SimualtingOnState = true
 
 	tstart := time.Now()
 
@@ -419,7 +427,7 @@ func (simulator *Simulator) SimulateOnCurrentState(addressesToReturnBalances []c
 		Time:       parent.Time() + 3, //FIXME:Need to take it from config for future changes...
 		Difficulty: big.NewInt(2),
 	}
-	nextValidator := simulator.currentEnv.validators[(parent.NumberU64()+1)%uint64(len(simulator.currentEnv.validators))]
+	nextValidator := simulator.validators[(parent.NumberU64()+1)%uint64(len(simulator.validators))]
 	log.Info("Simulator: Got next validator", "currentValidator", parent.Coinbase(), "currentDifficulty", parent.Difficulty(), "nextValidator", nextValidator)
 	header.Coinbase = nextValidator
 	env := &simEnvironment{
@@ -463,8 +471,8 @@ func (simulator *Simulator) SimulateOnCurrentState(addressesToReturnBalances []c
 	}
 
 	if len(pending) != 0 {
-		txs := types.NewTransactionsByPriceAndNonceForSimulator(env.signer, pending, simulator.currentEnv.timeBlockReceived, simulator.timeOffset, false)
-		if simulator.commitTransactions(env, txs, nil, simulator.currentEnv.header, stoppingHash) {
+		txs := types.NewTransactionsByPriceAndNonceForSimulator(env.signer, pending, timeBlockReceived, simulator.timeOffset, false)
+		if simulator.commitTransactions(env, txs, nil, parent.Header(), stoppingHash) {
 			log.Error("Simulator: Something went wrong with commitTransactions")
 			return nil
 		}
@@ -528,6 +536,7 @@ func (simulator *Simulator) SimulateOnCurrentStateSingleTx(blockNumberToSimulate
 	var parent *types.Block
 	var state *state.StateDB
 	var err error
+	var timeBlockReceived time.Time
 	currentBlock := simulator.chain.CurrentBlock()
 	currentBlockNum := currentBlock.Number()
 	oneBlockBeforeSim := new(big.Int)
@@ -537,6 +546,8 @@ func (simulator *Simulator) SimulateOnCurrentStateSingleTx(blockNumberToSimulate
 	if oneBlockBeforeSim.Cmp(currentBlockNum) == 0 {
 		parent = currentBlock
 		state, err = simulator.chain.StateAt(parent.Root())
+		timeBlockReceived = time.Time{}
+		log.Info("Simulator: SimulateOnCurrentStateSingleForGasUsage, One block before simulation", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
 		if err != nil {
 			log.Error("Simulator: Failed to create simulator context", "err", err)
 			return nil
@@ -549,6 +560,8 @@ func (simulator *Simulator) SimulateOnCurrentStateSingleTx(blockNumberToSimulate
 		if oneBlockBeforeSim.Cmp(simulator.currentEnv.block.Number()) == 0 {
 			parent = simulator.currentEnv.block
 			state = simulator.currentEnv.state.Copy()
+			timeBlockReceived = simulator.currentEnv.timeBlockReceived
+			log.Info("Simulator: SimulateOnCurrentStateSingleForGasUsage, Two block before simulation", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
 		} else {
 			log.Warn("Simulator: not busy, but simulated next state is not compatible with block to simulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
 			return nil
@@ -569,7 +582,7 @@ func (simulator *Simulator) SimulateOnCurrentStateSingleTx(blockNumberToSimulate
 		Time:       parent.Time() + 3, //FIXME:Need to take it from config for future changes...
 		Difficulty: big.NewInt(2),
 	}
-	nextValidator := simulator.currentEnv.validators[(parent.NumberU64()+1)%uint64(len(simulator.currentEnv.validators))]
+	nextValidator := simulator.validators[(parent.NumberU64()+1)%uint64(len(simulator.validators))]
 	log.Info("Simulator: Got next validator", "currentValidator", parent.Coinbase(), "currentDifficulty", parent.Difficulty(), "nextValidator", nextValidator)
 	header.Coinbase = nextValidator
 	env := &simEnvironment{
@@ -648,14 +661,9 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 	// Keep track of transactions which return errors so they can be removed
 	x2Env.tcount = 0
 
-	x2Env.validators, err = simulator.getCurrentValidators(currentBlock.Hash())
-	if err != nil {
-		log.Error("Simulator: Failed to get current validators set", "err", err)
-		return nil
-	}
-	sort.Sort(validatorsAscending(x2Env.validators))
-	log.Info("Simulator: Got validators set", "validators", x2Env.validators)
-	x2Validator := x2Env.validators[(currentBlock.NumberU64()+1)%uint64(len(x2Env.validators))]
+	sort.Sort(validatorsAscending(simulator.validators))
+	log.Info("Simulator: Got validators set", "validators", simulator.validators)
+	x2Validator := simulator.validators[(currentBlock.NumberU64()+1)%uint64(len(simulator.validators))]
 	log.Info("Simulator: Got next validator", "currentValidator", currentBlock.Coinbase(), "currentDifficulty", currentBlock.Difficulty(), "x2Validator", x2Validator)
 	x2Header.Coinbase = x2Validator
 
@@ -733,7 +741,7 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 		Difficulty: big.NewInt(2),
 	}
 	x3State := x2Env.state.Copy()
-	x3Validator := x2Env.validators[(x2Env.block.NumberU64()+1)%uint64(len(x2Env.validators))]
+	x3Validator := simulator.validators[(x2Env.block.NumberU64()+1)%uint64(len(simulator.validators))]
 	log.Info("Simulator: Got next validator", "x2Validator", x2Env.block.Coinbase(), "currentDifficulty", x2Env.block.Difficulty(), "x3Validator", x3Validator)
 	x3Header.Coinbase = x3Validator
 	x3Env := &simEnvironment{
