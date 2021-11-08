@@ -162,7 +162,10 @@ func (simulator *Simulator) simulateNextState() {
 		Time:       parent.Time() + 3, //FIXME:Need to take it from config for future changes...
 		Difficulty: big.NewInt(2),
 	}
+	tstartGetLatestState := time.Now()
 	state, err := simulator.chain.StateAt(parent.Root())
+	procTimeGetLatestState := time.Since(tstartGetLatestState)
+	log.Info("Simulator. getting latest state processing time", "procTimeGetLatestState", common.PrettyDuration(procTimeGetLatestState))
 	if err != nil {
 		log.Error("Simulator: Failed to create simulator context", "err", err)
 		return
@@ -215,6 +218,13 @@ func (simulator *Simulator) simulateNextState() {
 	simulator.currentEnv = env
 	procTime := time.Since(tstart)
 	log.Info("Simulator: Finished simulating next state", "blockNumber", env.block.Number(), "txs", len(env.block.Transactions()), "gasUsed", env.block.GasUsed(), "procTime", common.PrettyDuration(procTime))
+
+	//Testing FIXME:Remove meFIXME:Remove meFIXME:Remove meFIXME:Remove meFIXME:Remove meFIXME:Remove meFIXME:Remove me
+	tstartCopyState := time.Now()
+	copyState := simulator.currentEnv.state.Copy()
+	procTimeCopyState := time.Since(tstartCopyState)
+	log.Info("Simulator. copy state processing time", "procTimeCopyState", common.PrettyDuration(procTimeCopyState), "stam", copyState.AccountReads)
+	//Testing FIXME:Remove meFIXME:Remove meFIXME:Remove meFIXME:Remove meFIXME:Remove meFIXME:Remove meFIXME:Remove me
 }
 
 /*********************** Simulating on current state ***********************/
@@ -236,7 +246,7 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 		parent = currentBlock
 		state, err = simulator.chain.StateAt(parent.Root())
 		timeBlockReceived = time.Time{}
-		log.Info("Simulator: SimulateOnCurrentStatePriority, One block before simulation", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
+		log.Info("Simulator: SimulateOnCurrentStatePriority, One block before simulation", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
 		if err != nil {
 			log.Error("Simulator: Failed to create simulator context", "err", err)
 			return nil
@@ -250,9 +260,9 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 			parent = simulator.currentEnv.block
 			state = simulator.currentEnv.state.Copy()
 			timeBlockReceived = simulator.currentEnv.timeBlockReceived
-			log.Info("Simulator: SimulateOnCurrentStatePriority, Two block before simulation", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
+			log.Info("Simulator: SimulateOnCurrentStatePriority, Two block before simulation", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
 		} else {
-			log.Warn("Simulator: not busy, but simulated next state is not compatible with block to simulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
+			log.Warn("Simulator: not busy, but simulated next state is not compatible with block to simulate", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
 			return nil
 		}
 	} else {
@@ -392,7 +402,7 @@ func (simulator *Simulator) SimulateOnCurrentState(addressesToReturnBalances []c
 		parent = currentBlock
 		state, err = simulator.chain.StateAt(parent.Root())
 		timeBlockReceived = time.Time{}
-		log.Info("Simulator: SimulateOnCurrentState, One block before simulation", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
+		log.Info("Simulator: SimulateOnCurrentState, One block before simulation", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
 		if err != nil {
 			log.Error("Simulator: Failed to create simulator context", "err", err)
 			return nil
@@ -406,9 +416,9 @@ func (simulator *Simulator) SimulateOnCurrentState(addressesToReturnBalances []c
 			parent = simulator.currentEnv.block
 			state = simulator.currentEnv.state.Copy()
 			timeBlockReceived = simulator.currentEnv.timeBlockReceived
-			log.Info("Simulator: SimulateOnCurrentState, Two block before simulation", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
+			log.Info("Simulator: SimulateOnCurrentState, Two block before simulation", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
 		} else {
-			log.Warn("Simulator: not busy, but simulated next state is not compatible with block to simulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
+			log.Warn("Simulator: not busy, but simulated next state is not compatible with block to simulate", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
 			return nil
 		}
 	} else {
@@ -547,7 +557,7 @@ func (simulator *Simulator) SimulateOnCurrentStateSingleTx(blockNumberToSimulate
 		parent = currentBlock
 		state, err = simulator.chain.StateAt(parent.Root())
 		timeBlockReceived = time.Time{}
-		log.Info("Simulator: SimulateOnCurrentStateSingleForGasUsage, One block before simulation", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
+		log.Info("Simulator: SimulateOnCurrentStateSingleForGasUsage, One block before simulation", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
 		if err != nil {
 			log.Error("Simulator: Failed to create simulator context", "err", err)
 			return nil
@@ -561,9 +571,9 @@ func (simulator *Simulator) SimulateOnCurrentStateSingleTx(blockNumberToSimulate
 			parent = simulator.currentEnv.block
 			state = simulator.currentEnv.state.Copy()
 			timeBlockReceived = simulator.currentEnv.timeBlockReceived
-			log.Info("Simulator: SimulateOnCurrentStateSingleForGasUsage, Two block before simulation", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
+			log.Info("Simulator: SimulateOnCurrentStateSingleForGasUsage, Two block before simulation", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
 		} else {
-			log.Warn("Simulator: not busy, but simulated next state is not compatible with block to simulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
+			log.Warn("Simulator: not busy, but simulated next state is not compatible with block to simulate", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
 			return nil
 		}
 	} else {
