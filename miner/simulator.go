@@ -218,13 +218,6 @@ func (simulator *Simulator) simulateNextState() {
 	simulator.currentEnv = env
 	procTime := time.Since(tstart)
 	log.Info("Simulator: Finished simulating next state", "blockNumber", env.block.Number(), "txs", len(env.block.Transactions()), "gasUsed", env.block.GasUsed(), "procTime", common.PrettyDuration(procTime))
-
-	//Testing FIXME:Remove meFIXME:Remove meFIXME:Remove meFIXME:Remove meFIXME:Remove meFIXME:Remove meFIXME:Remove me
-	tstartCopyState := time.Now()
-	copyState := simulator.currentEnv.state.Copy()
-	procTimeCopyState := time.Since(tstartCopyState)
-	log.Info("Simulator. copy state processing time", "procTimeCopyState", common.PrettyDuration(procTimeCopyState), "stam", copyState.AccountReads)
-	//Testing FIXME:Remove meFIXME:Remove meFIXME:Remove meFIXME:Remove meFIXME:Remove meFIXME:Remove meFIXME:Remove me
 }
 
 /*********************** Simulating on current state ***********************/
@@ -248,31 +241,33 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 		timeBlockReceived = time.Time{}
 		log.Info("Simulator: SimulateOnCurrentStatePriority, One block before simulation", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
 		if err != nil {
-			log.Error("Simulator: Failed to create simulator context", "err", err)
+			log.Error("Simulator: SimulateOnCurrentStatePriority Failed to create simulator context", "err", err)
 			return nil
 		}
 	} else if twoBlockBeforeSim.Cmp(currentBlockNum) == 0 {
 		if simulator.simualtingNextState {
-			log.Warn("Simulator: Busy simulating next state", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
+			log.Warn("Simulator: SimulateOnCurrentStatePriority Busy simulating next state", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
 			return nil
 		}
 		if oneBlockBeforeSim.Cmp(simulator.currentEnv.block.Number()) == 0 {
 			parent = simulator.currentEnv.block
+			tstartCopyState := time.Now()
 			state = simulator.currentEnv.state.Copy()
+			procTimeCopyState := time.Since(tstartCopyState)
 			timeBlockReceived = simulator.currentEnv.timeBlockReceived
-			log.Info("Simulator: SimulateOnCurrentStatePriority, Two block before simulation", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
+			log.Info("Simulator: SimulateOnCurrentStatePriority, Two block before simulation", "procTimeCopyState", common.PrettyDuration(procTimeCopyState), "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
 		} else {
-			log.Warn("Simulator: not busy, but simulated next state is not compatible with block to simulate", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
+			log.Warn("Simulator: SimulateOnCurrentStatePriority not busy, but simulated next state is not compatible with block to simulate", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
 			return nil
 		}
 	} else {
-		log.Warn("Simulator: Current block number is weird", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
+		log.Warn("Simulator: SimulateOnCurrentStatePriority Current block number is weird", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
 		return nil
 	}
 
 	tstart := time.Now()
 
-	log.Info("Simulator: Starting to simulate on top of current state")
+	log.Info("Simulator: SimulateOnCurrentStatePriority Starting to simulate on top of current state")
 
 	num := parent.Number()
 	header := &types.Header{
@@ -404,31 +399,33 @@ func (simulator *Simulator) SimulateOnCurrentState(addressesToReturnBalances []c
 		timeBlockReceived = time.Time{}
 		log.Info("Simulator: SimulateOnCurrentState, One block before simulation", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
 		if err != nil {
-			log.Error("Simulator: Failed to create simulator context", "err", err)
+			log.Error("Simulator: SimulateOnCurrentState Failed to create simulator context", "err", err)
 			return nil
 		}
 	} else if twoBlockBeforeSim.Cmp(currentBlockNum) == 0 {
 		if simulator.simualtingNextState {
-			log.Warn("Simulator: Busy simulating next state", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
+			log.Warn("Simulator: SimulateOnCurrentState Busy simulating next state", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
 			return nil
 		}
 		if oneBlockBeforeSim.Cmp(simulator.currentEnv.block.Number()) == 0 {
 			parent = simulator.currentEnv.block
+			tstartCopyState := time.Now()
 			state = simulator.currentEnv.state.Copy()
+			procTimeCopyState := time.Since(tstartCopyState)
 			timeBlockReceived = simulator.currentEnv.timeBlockReceived
-			log.Info("Simulator: SimulateOnCurrentState, Two block before simulation", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
+			log.Info("Simulator: SimulateOnCurrentState, Two block before simulation", "procTimeCopyState", common.PrettyDuration(procTimeCopyState), "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
 		} else {
-			log.Warn("Simulator: not busy, but simulated next state is not compatible with block to simulate", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
+			log.Warn("Simulator: SimulateOnCurrentState not busy, but simulated next state is not compatible with block to simulate", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
 			return nil
 		}
 	} else {
-		log.Warn("Simulator: Current block number is weird", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
+		log.Warn("Simulator: SimulateOnCurrentState Current block number is weird", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
 		return nil
 	}
 
 	tstart := time.Now()
 
-	log.Info("Simulator: Starting to simulate on top of current state")
+	log.Info("Simulator: SimulateOnCurrentState Starting to simulate on top of current state")
 	num := parent.Number()
 	header := &types.Header{
 		ParentHash: parent.Hash(),
@@ -542,7 +539,7 @@ func (simulator *Simulator) SimulateOnCurrentState(addressesToReturnBalances []c
 /*********************** Simulating on current state single tx***********************/
 func (simulator *Simulator) SimulateOnCurrentStateSingleTx(blockNumberToSimulate *big.Int, tx *types.Transaction) map[string]interface{} {
 	simulator.SimualtingOnState = true
-	log.Info("Simulator: New SimulateOnCurrentStateSingleForGasUsage call. checking if simulator is free...", "simualtingNextState", simulator.simualtingNextState)
+	log.Info("Simulator: New SimulateOnCurrentStateSingleTx call. checking if simulator is free...", "simualtingNextState", simulator.simualtingNextState)
 	var parent *types.Block
 	var state *state.StateDB
 	var err error
@@ -557,33 +554,35 @@ func (simulator *Simulator) SimulateOnCurrentStateSingleTx(blockNumberToSimulate
 		parent = currentBlock
 		state, err = simulator.chain.StateAt(parent.Root())
 		timeBlockReceived = time.Time{}
-		log.Info("Simulator: SimulateOnCurrentStateSingleForGasUsage, One block before simulation", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
+		log.Info("Simulator: SimulateOnCurrentStateSingleTx, One block before simulation", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
 		if err != nil {
-			log.Error("Simulator: Failed to create simulator context", "err", err)
+			log.Error("Simulator: SimulateOnCurrentStateSingleTx Failed to create simulator context", "err", err)
 			return nil
 		}
 	} else if twoBlockBeforeSim.Cmp(currentBlockNum) == 0 {
 		if simulator.simualtingNextState {
-			log.Warn("Simulator: Busy simulating next state", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
+			log.Warn("Simulator: SimulateOnCurrentStateSingleTx Busy simulating next state", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
 			return nil
 		}
 		if oneBlockBeforeSim.Cmp(simulator.currentEnv.block.Number()) == 0 {
 			parent = simulator.currentEnv.block
+			tstartCopyState := time.Now()
 			state = simulator.currentEnv.state.Copy()
+			procTimeCopyState := time.Since(tstartCopyState)
 			timeBlockReceived = simulator.currentEnv.timeBlockReceived
-			log.Info("Simulator: SimulateOnCurrentStateSingleForGasUsage, Two block before simulation", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
+			log.Info("Simulator: SimulateOnCurrentStateSingleTx, Two block before simulation", "procTimeCopyState", common.PrettyDuration(procTimeCopyState), "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
 		} else {
-			log.Warn("Simulator: not busy, but simulated next state is not compatible with block to simulate", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
+			log.Warn("Simulator: SimulateOnCurrentStateSingleTx not busy, but simulated next state is not compatible with block to simulate", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
 			return nil
 		}
 	} else {
-		log.Warn("Simulator: Current block number is weird", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
+		log.Warn("Simulator: SimulateOnCurrentStateSingleTx Current block number is weird", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
 		return nil
 	}
 
 	tstart := time.Now()
 
-	log.Info("Simulator: Starting to simulate on top of current state")
+	log.Info("Simulator: SimulateOnCurrentStateSingleTx Starting to simulate on top of current state")
 	num := parent.Number()
 	header := &types.Header{
 		ParentHash: parent.Hash(),
