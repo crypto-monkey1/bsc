@@ -233,7 +233,7 @@ func (api *PrivateMinerAPI) SimulateOnCurrentStateSingleTx(blockNumberToSimulate
 	return api.e.SimulateOnCurrentStateSingleTx(blockNumberToSimulate, tx)
 }
 
-func (api *PrivateMinerAPI) SimulateNextTwoStates(addressesToReturnBalances []common.Address, x1BlockNumber *big.Int, x2InputTxs []hexutil.Bytes, x3InputTxs []hexutil.Bytes, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
+func (api *PrivateMinerAPI) SimulateNextTwoStates(addressesToReturnBalances []common.Address, x1BlockNumber *big.Int, inputPriorityX2 hexutil.Bytes, x2InputTxs []hexutil.Bytes, x3InputTxs []hexutil.Bytes, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
 	x2TxsArray := make([]types.Transaction, len(x2InputTxs))
 	for i, input := range x2InputTxs {
 		if err := x2TxsArray[i].UnmarshalBinary(input); err != nil {
@@ -248,7 +248,12 @@ func (api *PrivateMinerAPI) SimulateNextTwoStates(addressesToReturnBalances []co
 			return nil
 		}
 	}
-	return api.e.SimulateNextTwoStates(addressesToReturnBalances, x1BlockNumber, x2TxsArray, x3TxsArray, stoppingHash, stopReceiptHash, returnedDataHash)
+	priorityX2Tx := &types.Transaction{}
+	if err := priorityX2Tx.UnmarshalBinary(inputPriorityX2); err != nil {
+		log.Error("Simulator: Couldnt unmarshal priority tx", "err", err)
+		return nil
+	}
+	return api.e.SimulateNextTwoStates(addressesToReturnBalances, x1BlockNumber, priorityX2Tx, x2TxsArray, x3TxsArray, stoppingHash, stopReceiptHash, returnedDataHash)
 }
 
 // SetRecommitInterval updates the interval for miner sealing work recommitting.

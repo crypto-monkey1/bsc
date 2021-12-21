@@ -33,6 +33,7 @@ import (
 type SignerTxFn func(accounts.Account, *types.Transaction, *big.Int) (*types.Transaction, error)
 
 const offsetInMs = 0
+const dumpAllReceipts = false
 
 // environment is the worker's current environment and holds all of the current state information.
 type simEnvironment struct {
@@ -297,10 +298,12 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 		return nil
 	}
 
+	//Delete Proirity
+	fromPriority, _ := types.Sender(env.signer, priorityTx)
+	delete(pending, fromPriority)
+
 	//Inject txs
 	if len(txsToInject) > 0 {
-		fromPriority, _ := types.Sender(env.signer, priorityTx)
-		delete(pending, fromPriority)
 		for i, _ := range txsToInject {
 			from, _ := types.Sender(env.signer, &txsToInject[i])
 			delete(pending, from)
@@ -343,9 +346,15 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 
 	//get receipts
 	txArrayReceipts := []types.Receipt{}
+	allReceipts := []types.Receipt{}
 
 	highestGasPrice := big.NewInt(0)
 	returnedData := "0"
+	if dumpAllReceipts {
+		for _, receipt := range env.receipts {
+			allReceipts = append(allReceipts, *receipt)
+		}
+	}
 	for i, receipt := range env.receipts {
 
 		if receipt.TxHash == priorityTx.Hash() {
@@ -372,6 +381,7 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 		"returnedData":         returnedData,
 		"currentStateNotReady": false,
 		"wrongBlock":           false,
+		"allReceipts":          allReceipts,
 	}
 
 	return simulatorResult
@@ -631,7 +641,7 @@ func (simulator *Simulator) SimulateOnCurrentStateSingleTx(blockNumberToSimulate
 
 /*********************** Simulate costum next two states  ***********************/
 
-func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []common.Address, x1BlockNumber *big.Int, x2TxsToInject []types.Transaction, x3TxsToInject []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
+func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []common.Address, x1BlockNumber *big.Int, priorityX2Tx *types.Transaction, x2TxsToInject []types.Transaction, x3TxsToInject []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
 	//Phase0: make sure we have the right block (x+1)
 	tstart := time.Now()
 	log.Info("Simulator: Starting to simulate next two states", "timeReceivedX+1", simulator.timeBlockReceived, "timeNow", time.Now())
@@ -689,6 +699,11 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 			log.Info("Simulator: Deleted a tx from x2 pending ", "from", from, "hash", x3TxsToInject[i].Hash())
 		}
 	}
+
+	//Delete Proirity
+	fromPriority, _ := types.Sender(x2Env.signer, priorityX2Tx)
+	delete(x2Pending, fromPriority)
+
 	//Inject txs
 	if len(x2TxsToInject) > 0 {
 		for i, _ := range x2TxsToInject {
@@ -713,7 +728,7 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 	}
 	if len(x2Pending) != 0 {
 		txs := types.NewTransactionsByPriceAndNonceForSimulator(x2Env.signer, x2Pending, x2Env.timeBlockReceived, simulator.timeOffset, true)
-		if simulator.commitTransactions(x2Env, txs, nil, nil, common.Hash{}) {
+		if simulator.commitTransactions(x2Env, txs, priorityX2Tx, nil, common.Hash{}) {
 			log.Error("Simulator: Something went wrong with commitTransactions")
 			return nil
 		}
@@ -737,6 +752,13 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 			}
 		}
 	}
+	allX2Receipts := []types.Receipt{}
+	if dumpAllReceipts {
+		for _, receipt := range x2Env.receipts {
+			allX2Receipts = append(allX2Receipts, *receipt)
+		}
+	}
+
 	//Testing to here
 	//phase2: simulate state (x+3) with inject txs
 	x2Num := x2Env.block.Number()
@@ -840,6 +862,12 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 	//get receipts
 	returnedReceipts := []types.Receipt{}
 	txArrayReceipts := []types.Receipt{}
+	allX3Receipts := []types.Receipt{}
+	if dumpAllReceipts {
+		for _, receipt := range x3Env.receipts {
+			allX3Receipts = append(allX3Receipts, *receipt)
+		}
+	}
 
 	keepAdding := true
 	returnedData := "0"
@@ -868,6 +896,8 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 		"txArrayReceipts":   txArrayReceipts,
 		"balances":          balances,
 		"returnedData":      returnedData,
+		"allX2Receipts":     allX2Receipts,
+		"allX3Receipts":     allX3Receipts,
 	}
 
 	return simulatorResult

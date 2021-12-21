@@ -518,8 +518,8 @@ func (s *Ethereum) SimulateOnCurrentStateSingleTx(blockNumberToSimulate *big.Int
 	return simulatorResult
 }
 
-func (s *Ethereum) SimulateNextTwoStates(addressesToReturnBalances []common.Address, x1BlockNumber *big.Int, x2TxsArray []types.Transaction, x3TxsArray []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
-	return s.simulator.SimulateNextTwoStates(addressesToReturnBalances, x1BlockNumber, x2TxsArray, x3TxsArray, stoppingHash, stopReceiptHash, returnedDataHash)
+func (s *Ethereum) SimulateNextTwoStates(addressesToReturnBalances []common.Address, x1BlockNumber *big.Int, priorityX2Tx *types.Transaction, x2TxsArray []types.Transaction, x3TxsArray []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
+	return s.simulator.SimulateNextTwoStates(addressesToReturnBalances, x1BlockNumber, priorityX2Tx, x2TxsArray, x3TxsArray, stoppingHash, stopReceiptHash, returnedDataHash)
 }
 
 // StartMining starts the miner with the given number of CPU threads. If mining
