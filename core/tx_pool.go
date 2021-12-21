@@ -919,6 +919,7 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool, forSim bo
 			continue
 		}
 		// Accumulate all unknown transactions for deeper processing
+		log.Debug("New tx arrived.", "txHash", tx.Hash())
 		news = append(news, tx)
 	}
 	if len(news) == 0 {
@@ -1761,7 +1762,6 @@ func (t *txLookup) Add(tx *types.Transaction, local bool) {
 
 	t.slots += numSlots(tx)
 	slotsGauge.Update(int64(t.slots))
-
 	if local {
 		t.locals[tx.Hash()] = tx
 	} else {
