@@ -220,7 +220,7 @@ func (simulator *Simulator) simulateNextState() {
 }
 
 /*********************** Simulating on current state ***********************/
-func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, blockNumberToSimulate *big.Int, priorityTx *types.Transaction, txsToInject []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
+func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, blockNumberToSimulate *big.Int, priorityTx *types.Transaction, txsToInject []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
 	simulator.SimualtingOnState = true
 	log.Info("Simulator: New SimulateOnCurrentStatePriority call. checking if simulator is free...", "simualtingOnState", simulator.SimualtingOnState, "simualtingNextState", simulator.simualtingNextState)
 
@@ -298,16 +298,21 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 		return nil
 	}
 
+	//delete from pending
+	for _, address := range addressesToDeleteFromPending {
+		delete(pending, address)
+	}
+
 	//Delete Proirity
-	fromPriority, _ := types.Sender(env.signer, priorityTx)
-	delete(pending, fromPriority)
+	// fromPriority, _ := types.Sender(env.signer, priorityTx)
+	// delete(pending, fromPriority)
 
 	//Inject txs
 	if len(txsToInject) > 0 {
-		for i, _ := range txsToInject {
-			from, _ := types.Sender(env.signer, &txsToInject[i])
-			delete(pending, from)
-		}
+		// for i, _ := range txsToInject {
+		// 	from, _ := types.Sender(env.signer, &txsToInject[i])
+		// 	delete(pending, from)
+		// }
 		for i, _ := range txsToInject {
 			//Set time of sending to now in order for it to be sorted last
 			txsToInject[i].SetTimeNowPlusOffset(100)
@@ -641,7 +646,7 @@ func (simulator *Simulator) SimulateOnCurrentStateSingleTx(blockNumberToSimulate
 
 /*********************** Simulate costum next two states  ***********************/
 
-func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []common.Address, x1BlockNumber *big.Int, priorityX2Tx *types.Transaction, x2TxsToInject []types.Transaction, x3TxsToInject []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
+func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, x1BlockNumber *big.Int, priorityX2Tx *types.Transaction, x2TxsToInject []types.Transaction, x3TxsToInject []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
 	//Phase0: make sure we have the right block (x+1)
 	tstart := time.Now()
 	log.Info("Simulator: Starting to simulate next two states", "timeReceivedX+1", simulator.timeBlockReceived, "timeNow", time.Now())
@@ -690,28 +695,33 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 		return nil
 	}
 
-	//Dismiss txs
-	if len(x3TxsToInject) > 0 {
-		for i, _ := range x3TxsToInject {
-			from, _ := types.Sender(x2Env.signer, &x3TxsToInject[i])
-			log.Info("Simulator: Before Deleting a tx from x2 pending ", "from", from, "hash", x3TxsToInject[i].Hash(), "numTxs", len(x2Pending[from]))
-			delete(x2Pending, from)
-			log.Info("Simulator: Deleted a tx from x2 pending ", "from", from, "hash", x3TxsToInject[i].Hash())
-		}
+	//delete from pending
+	for _, address := range addressesToDeleteFromPending {
+		delete(x2Pending, address)
 	}
 
+	//Dismiss txs
+	// if len(x3TxsToInject) > 0 {
+	// 	for i, _ := range x3TxsToInject {
+	// 		from, _ := types.Sender(x2Env.signer, &x3TxsToInject[i])
+	// 		log.Info("Simulator: Before Deleting a tx from x2 pending ", "from", from, "hash", x3TxsToInject[i].Hash(), "numTxs", len(x2Pending[from]))
+	// 		delete(x2Pending, from)
+	// 		log.Info("Simulator: Deleted a tx from x2 pending ", "from", from, "hash", x3TxsToInject[i].Hash())
+	// 	}
+	// }
+
 	//Delete Proirity
-	fromPriority, _ := types.Sender(x2Env.signer, priorityX2Tx)
-	delete(x2Pending, fromPriority)
+	// fromPriority, _ := types.Sender(x2Env.signer, priorityX2Tx)
+	// delete(x2Pending, fromPriority)
 
 	//Inject txs
 	if len(x2TxsToInject) > 0 {
-		for i, _ := range x2TxsToInject {
-			from, _ := types.Sender(x2Env.signer, &x2TxsToInject[i])
-			log.Info("Simulator: Before Deleting a tx from x2 pending ", "from", from, "hash", x2TxsToInject[i].Hash(), "numTxs", len(x2Pending[from]))
-			delete(x2Pending, from)
-			log.Info("Simulator: Deleted a tx from x2 pending ", "from", from, "hash", x2TxsToInject[i].Hash(), "numTxs", len(x2Pending[from]))
-		}
+		// for i, _ := range x2TxsToInject {
+		// 	from, _ := types.Sender(x2Env.signer, &x2TxsToInject[i])
+		// 	log.Info("Simulator: Before Deleting a tx from x2 pending ", "from", from, "hash", x2TxsToInject[i].Hash(), "numTxs", len(x2Pending[from]))
+		// 	delete(x2Pending, from)
+		// 	log.Info("Simulator: Deleted a tx from x2 pending ", "from", from, "hash", x2TxsToInject[i].Hash(), "numTxs", len(x2Pending[from]))
+		// }
 		for i, _ := range x2TxsToInject {
 			x2TxsToInject[i].SetTime(x2Env.timeBlockReceived.Add(-simulator.timeOffset))
 			from, _ := types.Sender(x2Env.signer, &x2TxsToInject[i])
@@ -791,24 +801,29 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 		return nil
 	}
 
-	//Dismiss txs
-	if len(x2TxsToInject) > 0 {
-		for i, _ := range x2TxsToInject {
-			from, _ := types.Sender(x3Env.signer, &x2TxsToInject[i])
-			log.Info("Simulator: Before Deleting a tx from x3 pending ", "from", from, "hash", x2TxsToInject[i].Hash(), "numTxs", len(x3Pending[from]))
-			delete(x3Pending, from)
-			log.Info("Simulator: Deleted a tx from x3 pending ", "from", from, "hash", x2TxsToInject[i].Hash())
-		}
+	//delete from pending
+	for _, address := range addressesToDeleteFromPending {
+		delete(x3Pending, address)
 	}
+
+	//Dismiss txs
+	// if len(x2TxsToInject) > 0 {
+	// 	for i, _ := range x2TxsToInject {
+	// 		from, _ := types.Sender(x3Env.signer, &x2TxsToInject[i])
+	// 		log.Info("Simulator: Before Deleting a tx from x3 pending ", "from", from, "hash", x2TxsToInject[i].Hash(), "numTxs", len(x3Pending[from]))
+	// 		delete(x3Pending, from)
+	// 		log.Info("Simulator: Deleted a tx from x3 pending ", "from", from, "hash", x2TxsToInject[i].Hash())
+	// 	}
+	// }
 
 	//Inject txs
 	if len(x3TxsToInject) > 0 {
-		for i, _ := range x3TxsToInject {
-			from, _ := types.Sender(x3Env.signer, &x3TxsToInject[i])
-			log.Info("Simulator: Before Deleting a tx from x3 pending ", "from", from, "hash", x3TxsToInject[i].Hash(), "numTxs", len(x3Pending[from]))
-			delete(x3Pending, from)
-			log.Info("Simulator: Deleted a tx from x3 pending ", "from", from, "hash", x3TxsToInject[i].Hash())
-		}
+		// for i, _ := range x3TxsToInject {
+		// 	from, _ := types.Sender(x3Env.signer, &x3TxsToInject[i])
+		// 	log.Info("Simulator: Before Deleting a tx from x3 pending ", "from", from, "hash", x3TxsToInject[i].Hash(), "numTxs", len(x3Pending[from]))
+		// 	delete(x3Pending, from)
+		// 	log.Info("Simulator: Deleted a tx from x3 pending ", "from", from, "hash", x3TxsToInject[i].Hash())
+		// }
 		for i, _ := range x3TxsToInject {
 			//Set time of sending to now in order for it to be sorted last
 			x3TxsToInject[i].SetTimeNowPlusOffset(100)
