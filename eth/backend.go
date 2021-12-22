@@ -506,8 +506,8 @@ func (s *Ethereum) SimulateOnCurrentState(addressesToReturnBalances []common.Add
 	return simulatorResult
 }
 
-func (s *Ethereum) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, blockNumberToSimulate *big.Int, priorityTx *types.Transaction, txsArray []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
-	simulatorResult := s.simulator.SimulateOnCurrentStatePriority(addressesToReturnBalances, addressesToDeleteFromPending, blockNumberToSimulate, priorityTx, txsArray, stoppingHash, returnedDataHash)
+func (s *Ethereum) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, blockNumberToSimulate *big.Int, priorityTx *types.Transaction, txsArray []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash) map[string]interface{} {
+	simulatorResult := s.simulator.SimulateOnCurrentStatePriority(addressesToReturnBalances, addressesToDeleteFromPending, blockNumberToSimulate, priorityTx, txsArray, stoppingHash, returnedDataHash, victimHash)
 	s.simulator.SimualtingOnState = false
 	return simulatorResult
 }
@@ -518,8 +518,8 @@ func (s *Ethereum) SimulateOnCurrentStateSingleTx(blockNumberToSimulate *big.Int
 	return simulatorResult
 }
 
-func (s *Ethereum) SimulateNextTwoStates(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, x1BlockNumber *big.Int, priorityX2Tx *types.Transaction, x2TxsArray []types.Transaction, x3TxsArray []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
-	return s.simulator.SimulateNextTwoStates(addressesToReturnBalances, addressesToDeleteFromPending, x1BlockNumber, priorityX2Tx, x2TxsArray, x3TxsArray, stoppingHash, stopReceiptHash, returnedDataHash)
+func (s *Ethereum) SimulateNextTwoStates(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, x1BlockNumber *big.Int, priorityX2Tx *types.Transaction, x2TxsArray []types.Transaction, x3TxsArray []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash) map[string]interface{} {
+	return s.simulator.SimulateNextTwoStates(addressesToReturnBalances, addressesToDeleteFromPending, x1BlockNumber, priorityX2Tx, x2TxsArray, x3TxsArray, stoppingHash, stopReceiptHash, returnedDataHash, victimHash)
 }
 
 // StartMining starts the miner with the given number of CPU threads. If mining

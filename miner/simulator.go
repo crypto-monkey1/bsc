@@ -220,9 +220,9 @@ func (simulator *Simulator) simulateNextState() {
 }
 
 /*********************** Simulating on current state ***********************/
-func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, blockNumberToSimulate *big.Int, priorityTx *types.Transaction, txsToInject []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
+func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, blockNumberToSimulate *big.Int, priorityTx *types.Transaction, txsToInject []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash) map[string]interface{} {
 	simulator.SimualtingOnState = true
-	log.Info("Simulator: New SimulateOnCurrentStatePriority call. checking if simulator is free...", "simualtingOnState", simulator.SimualtingOnState, "simualtingNextState", simulator.simualtingNextState)
+	log.Info("Simulator: New SimulateOnCurrentStatePriority call. checking if simulator is free...", "simualtingOnState", simulator.SimualtingOnState, "simualtingNextState", simulator.simualtingNextState, "victimHash", victimHash)
 
 	var parent *types.Block
 	var state *state.StateDB
@@ -352,6 +352,7 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 	//get receipts
 	txArrayReceipts := []types.Receipt{}
 	allReceipts := []types.Receipt{}
+	victimReceipt := types.Receipt{}
 
 	highestGasPrice := big.NewInt(0)
 	returnedData := "0"
@@ -371,6 +372,10 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 			returnedData = receipt.ReturnedData
 		}
 
+		if receipt.TxHash == victimHash {
+			victimReceipt = *receipt
+		}
+
 		for _, tx := range txsToInject {
 			if receipt.TxHash == tx.Hash() {
 				txArrayReceipts = append(txArrayReceipts, *receipt)
@@ -387,6 +392,7 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 		"currentStateNotReady": false,
 		"wrongBlock":           false,
 		"allReceipts":          allReceipts,
+		"victimReceipt":        victimReceipt,
 	}
 
 	return simulatorResult
@@ -646,10 +652,10 @@ func (simulator *Simulator) SimulateOnCurrentStateSingleTx(blockNumberToSimulate
 
 /*********************** Simulate costum next two states  ***********************/
 
-func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, x1BlockNumber *big.Int, priorityX2Tx *types.Transaction, x2TxsToInject []types.Transaction, x3TxsToInject []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
+func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, x1BlockNumber *big.Int, priorityX2Tx *types.Transaction, x2TxsToInject []types.Transaction, x3TxsToInject []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash) map[string]interface{} {
 	//Phase0: make sure we have the right block (x+1)
 	tstart := time.Now()
-	log.Info("Simulator: Starting to simulate next two states", "timeReceivedX+1", simulator.timeBlockReceived, "timeNow", time.Now())
+	log.Info("Simulator: Starting to simulate next two states", "timeReceivedX+1", simulator.timeBlockReceived, "timeNow", time.Now(), "victimHash", victimHash)
 	currentBlock := simulator.chain.CurrentBlock()
 	currentBlockNumber := currentBlock.Number()
 	if currentBlockNumber.Cmp(x1BlockNumber) != 0 {
@@ -750,9 +756,18 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 	firstStateProcTime := time.Since(tstart)
 	log.Info("Simulator: Finished simulating first state", "blockNumber", x2Env.block.Number(), "txs", len(x2Env.block.Transactions()), "gasUsed", x2Env.block.GasUsed(), "procTime", common.PrettyDuration(firstStateProcTime))
 	//Testing from here
+	victimReceiptX2 := types.Receipt{}
+	txArrayReceipts := []types.Receipt{}
 	for _, receipt := range x2Env.receipts {
+		if receipt.TxHash == priorityX2Tx.Hash() {
+			txArrayReceipts = append(txArrayReceipts, *receipt)
+		}
+		if receipt.TxHash == victimHash {
+			victimReceiptX2 = *receipt
+		}
 		for _, tx := range x2TxsToInject {
 			if receipt.TxHash == tx.Hash() {
+				txArrayReceipts = append(txArrayReceipts, *receipt)
 				log.Info("Simulator: Found injected tx reciet of x2 ", "hash", receipt.TxHash, "To", receipt.To, "GasPrice", receipt.GasPrice, "Nonce", receipt.Nonce, "RevertReason", receipt.RevertReason)
 			}
 		}
@@ -854,7 +869,11 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 	log.Info("Simulator: Finished simulating two states", "x3BlockNumber", x3Env.block.Number(), "txs", len(x3Env.block.Transactions()), "gasUsed", x3Env.block.GasUsed(), "procTime", common.PrettyDuration(procTime))
 
 	//Testing from here
+	victimReceiptX3 := types.Receipt{}
 	for _, receipt := range x3Env.receipts {
+		if receipt.TxHash == victimHash {
+			victimReceiptX3 = *receipt
+		}
 		for _, tx := range x2TxsToInject {
 			if receipt.TxHash == tx.Hash() {
 				log.Info("Simulator: Weird!! Found injected tx from x2 at reciet of x3 ", "hash", receipt.TxHash, "To", receipt.To, "GasPrice", receipt.GasPrice, "Nonce", receipt.Nonce, "RevertReason", receipt.RevertReason)
@@ -876,7 +895,7 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 
 	//get receipts
 	returnedReceipts := []types.Receipt{}
-	txArrayReceipts := []types.Receipt{}
+
 	allX3Receipts := []types.Receipt{}
 	if dumpAllReceipts {
 		for _, receipt := range x3Env.receipts {
@@ -913,6 +932,8 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 		"returnedData":      returnedData,
 		"allX2Receipts":     allX2Receipts,
 		"allX3Receipts":     allX3Receipts,
+		"victimReceiptX2":   victimReceiptX2,
+		"victimReceiptX3":   victimReceiptX3,
 	}
 
 	return simulatorResult
