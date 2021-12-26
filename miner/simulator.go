@@ -315,7 +315,7 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 		// }
 		for i, _ := range txsToInject {
 			//Set time of sending to now in order for it to be sorted last
-			txsToInject[i].SetTimeNowPlusOffset(100)
+			txsToInject[i].SetTimeNowPlusOffset(300)
 			from, _ := types.Sender(env.signer, &txsToInject[i])
 			if len(pending[from]) == 0 {
 				txsArray := make(types.Transactions, 0, 1)
@@ -482,7 +482,7 @@ func (simulator *Simulator) SimulateOnCurrentState(addressesToReturnBalances []c
 		}
 		for i, _ := range txsToInject {
 			//Set time of sending to now in order for it to be sorted last
-			txsToInject[i].SetTimeNowPlusOffset(100)
+			txsToInject[i].SetTimeNowPlusOffset(300)
 			from, _ := types.Sender(env.signer, &txsToInject[i])
 			if len(pending[from]) == 0 {
 				txsArray := make(types.Transactions, 0, 1)
@@ -643,6 +643,114 @@ func (simulator *Simulator) SimulateOnCurrentStateSingleTx(blockNumberToSimulate
 
 	simulatorResult := map[string]interface{}{
 		"receipt":              receipt,
+		"currentStateNotReady": false,
+		"wrongBlock":           false,
+	}
+
+	return simulatorResult
+}
+
+/*********************** Simulating on current state single tx***********************/
+func (simulator *Simulator) SimulateOnCurrentStateBundle(addressesToReturnBalances []common.Address, blockNumberToSimulate *big.Int, txs []types.Transaction) map[string]interface{} {
+	simulator.SimualtingOnState = true
+	log.Info("Simulator: New SimulateOnCurrentStateBundle call. checking if simulator is free...", "simualtingNextState", simulator.simualtingNextState)
+	var parent *types.Block
+	var state *state.StateDB
+	var err error
+	var timeBlockReceived time.Time
+	currentBlock := simulator.chain.CurrentBlock()
+	currentBlockNum := currentBlock.Number()
+	oneBlockBeforeSim := new(big.Int)
+	oneBlockBeforeSim = oneBlockBeforeSim.Sub(blockNumberToSimulate, common.Big1)
+	twoBlockBeforeSim := new(big.Int)
+	twoBlockBeforeSim = twoBlockBeforeSim.Sub(oneBlockBeforeSim, common.Big1)
+	if oneBlockBeforeSim.Cmp(currentBlockNum) == 0 {
+		parent = currentBlock
+		state, err = simulator.chain.StateAt(parent.Root())
+		timeBlockReceived = time.Time{}
+		log.Info("Simulator: SimulateOnCurrentStateBundle, One block before simulation", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
+		if err != nil {
+			log.Error("Simulator: SimulateOnCurrentStateBundle Failed to create simulator context", "err", err)
+			return nil
+		}
+	} else if twoBlockBeforeSim.Cmp(currentBlockNum) == 0 {
+		if simulator.simualtingNextState {
+			log.Warn("Simulator: SimulateOnCurrentStateBundle Busy simulating next state", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
+			return nil
+		}
+		if oneBlockBeforeSim.Cmp(simulator.currentEnv.block.Number()) == 0 {
+			parent = simulator.currentEnv.block
+			tstartCopyState := time.Now()
+			state = simulator.currentEnv.state.Copy()
+			procTimeCopyState := time.Since(tstartCopyState)
+			timeBlockReceived = simulator.currentEnv.timeBlockReceived
+			log.Info("Simulator: SimulateOnCurrentStateBundle, Two block before simulation", "procTimeCopyState", common.PrettyDuration(procTimeCopyState), "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
+		} else {
+			log.Warn("Simulator: SimulateOnCurrentStateBundle not busy, but simulated next state is not compatible with block to simulate", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
+			return nil
+		}
+	} else {
+		log.Warn("Simulator: SimulateOnCurrentStateBundle Current block number is weird", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
+		return nil
+	}
+
+	tstart := time.Now()
+
+	log.Info("Simulator: SimulateOnCurrentStateBundle Starting to simulate on top of current state")
+	num := parent.Number()
+	header := &types.Header{
+		ParentHash: parent.Hash(),
+		Number:     num.Add(num, common.Big1),
+		GasLimit:   core.CalcGasLimit(parent, simulator.config.GasFloor, simulator.config.GasCeil),
+		Time:       parent.Time() + 3, //FIXME:Need to take it from config for future changes...
+		Difficulty: big.NewInt(2),
+	}
+	nextValidator := simulator.validators[(parent.NumberU64()+1)%uint64(len(simulator.validators))]
+	log.Info("Simulator: Got next validator", "currentValidator", parent.Coinbase(), "currentDifficulty", parent.Difficulty(), "nextValidator", nextValidator)
+	header.Coinbase = nextValidator
+	env := &simEnvironment{
+		signer:    types.MakeSigner(simulator.chainConfig, header.Number),
+		state:     state,
+		ancestors: mapset.NewSet(),
+		family:    mapset.NewSet(),
+		uncles:    mapset.NewSet(),
+		header:    header,
+	}
+	// Keep track of transactions which return errors so they can be removed
+	env.tcount = 0
+
+	env.gasPool = new(core.GasPool).AddGas(env.header.GasLimit)
+	env.gasPool.SubGas(params.SystemTxsGas)
+
+	processorCapacity := 1
+	bloomProcessors := core.NewAsyncReceiptBloomGenerator(processorCapacity)
+	returnedReceipts := []types.Receipt{}
+	for _, tx := range txs {
+		env.state.Prepare(tx.Hash(), common.Hash{}, env.tcount)
+		receipt, err := core.ApplyTransactionForSimulator(simulator.chainConfig, simulator.chain, &env.header.Coinbase, env.gasPool, env.state, env.header, simulator.currentEnv.header, &tx, &env.header.GasUsed, *simulator.chain.GetVMConfig(), bloomProcessors)
+		if err != nil {
+			log.Error("Simulator: Failed Apply tx", "err", err, "txHash", tx.Hash())
+			return nil
+		}
+		log.Info("Simulator: Applied bundle tx", "txHash", tx.Hash())
+		returnedReceipts = append(returnedReceipts, *receipt)
+		env.tcount++
+	}
+
+	bloomProcessors.Close()
+
+	//get balances
+	balances := make([]*big.Int, len(addressesToReturnBalances))
+	for idx, address := range addressesToReturnBalances {
+		balances[idx] = env.state.GetBalance(address)
+	}
+
+	procTime := time.Since(tstart)
+	log.Info("Simulator: Finished simulating bundle on current state", "blockNumber", env.header.Number, "procTime", common.PrettyDuration(procTime))
+
+	simulatorResult := map[string]interface{}{
+		"receipts":             returnedReceipts,
+		"balances":             balances,
 		"currentStateNotReady": false,
 		"wrongBlock":           false,
 	}
@@ -841,7 +949,7 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 		// }
 		for i, _ := range x3TxsToInject {
 			//Set time of sending to now in order for it to be sorted last
-			x3TxsToInject[i].SetTimeNowPlusOffset(100)
+			x3TxsToInject[i].SetTimeNowPlusOffset(300)
 			from, _ := types.Sender(x3Env.signer, &x3TxsToInject[i])
 			if len(x3Pending[from]) == 0 {
 				txsArray := make(types.Transactions, 0, 1)

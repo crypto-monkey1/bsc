@@ -233,6 +233,17 @@ func (api *PrivateMinerAPI) SimulateOnCurrentStateSingleTx(blockNumberToSimulate
 	return api.e.SimulateOnCurrentStateSingleTx(blockNumberToSimulate, tx)
 }
 
+func (api *PrivateMinerAPI) SimulateOnCurrentStateBundle(addressesToReturnBalances []common.Address, blockNumberToSimulate *big.Int, inputTxs []hexutil.Bytes) map[string]interface{} {
+	txs := make([]types.Transaction, len(inputTxs))
+	for i, input := range inputTxs {
+		if err := txs[i].UnmarshalBinary(input); err != nil {
+			log.Error("Simulator: Couldnt unmarshal tx", "txIdx", i)
+			return nil
+		}
+	}
+	return api.e.SimulateOnCurrentStateBundle(addressesToReturnBalances, blockNumberToSimulate, txs)
+}
+
 func (api *PrivateMinerAPI) SimulateNextTwoStates(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, x1BlockNumber *big.Int, inputPriorityX2 hexutil.Bytes, x2InputTxs []hexutil.Bytes, x3InputTxs []hexutil.Bytes, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash) map[string]interface{} {
 	x2TxsArray := make([]types.Transaction, len(x2InputTxs))
 	for i, input := range x2InputTxs {
