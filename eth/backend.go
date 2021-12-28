@@ -528,6 +528,10 @@ func (s *Ethereum) SimulateNextTwoStates(addressesToReturnBalances []common.Addr
 	return s.simulator.SimulateNextTwoStates(addressesToReturnBalances, addressesToDeleteFromPending, x1BlockNumber, priorityX2Tx, x2TxsArray, x3TxsArray, stoppingHash, stopReceiptHash, returnedDataHash, victimHash)
 }
 
+func (s *Ethereum) GetNextState() map[string]interface{} {
+	return s.simulator.GetNextState()
+}
+
 // StartMining starts the miner with the given number of CPU threads. If mining
 // is already running, this method adjust the number of threads allowed to use
 // and updates the minimum price required by the transaction pool.

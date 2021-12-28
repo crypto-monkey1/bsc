@@ -146,6 +146,19 @@ func (simulator *Simulator) mainLoop() {
 
 	}
 }
+func (simulator *Simulator) GetNextState() map[string]interface{} {
+	if simulator.simualtingNextState {
+
+		currentBlock := simulator.chain.CurrentBlock()
+		currentBlockNum := currentBlock.Number()
+		log.Info("Currently simulating next state", "currentBlockNum", currentBlockNum)
+		return nil
+	}
+
+	return map[string]interface{}{
+		"receipts": simulator.currentEnv.receipts,
+	}
+}
 
 func (simulator *Simulator) simulateNextState() {
 	simulator.simualtingNextState = true
