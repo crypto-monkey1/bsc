@@ -565,18 +565,18 @@ func (p *Parlia) verifySeal(chain consensus.ChainHeaderReader, header *types.Hea
 		return errCoinBaseMisMatch
 	}
 
-	if _, ok := snap.Validators[signer]; !ok {
-		return errUnauthorizedValidator
-	}
+	// if _, ok := snap.Validators[signer]; !ok {
+	// 	return errUnauthorizedValidator
+	// }
 
-	for seen, recent := range snap.Recents {
-		if recent == signer {
-			// Signer is among recents, only fail if the current block doesn't shift it out
-			if limit := uint64(len(snap.Validators)/2 + 1); seen > number-limit {
-				return errRecentlySigned
-			}
-		}
-	}
+	// for seen, recent := range snap.Recents {
+	// 	if recent == signer {
+	// 		// Signer is among recents, only fail if the current block doesn't shift it out
+	// 		if limit := uint64(len(snap.Validators)/2 + 1); seen > number-limit {
+	// 			return errRecentlySigned
+	// 		}
+	// 	}
+	// }
 
 	// Ensure that the difficulty corresponds to the turn-ness of the signer
 	if !p.fakeDiff {
@@ -834,20 +834,20 @@ func (p *Parlia) Seal(chain consensus.ChainHeaderReader, block *types.Block, res
 	}
 
 	// Bail out if we're unauthorized to sign a block
-	if _, authorized := snap.Validators[val]; !authorized {
-		return errUnauthorizedValidator
-	}
+	// if _, authorized := snap.Validators[val]; !authorized {
+	// 	return errUnauthorizedValidator
+	// }
 
 	// If we're amongst the recent signers, wait for the next block
-	for seen, recent := range snap.Recents {
-		if recent == val {
-			// Signer is among recents, only wait if the current block doesn't shift it out
-			if limit := uint64(len(snap.Validators)/2 + 1); number < limit || seen > number-limit {
-				log.Info("Signed recently, must wait for others")
-				return nil
-			}
-		}
-	}
+	// for seen, recent := range snap.Recents {
+	// 	if recent == val {
+	// 		// Signer is among recents, only wait if the current block doesn't shift it out
+	// 		if limit := uint64(len(snap.Validators)/2 + 1); number < limit || seen > number-limit {
+	// 			log.Info("Signed recently, must wait for others")
+	// 			return nil
+	// 		}
+	// 	}
+	// }
 
 	// Sweet, the protocol permits us to sign the block, wait for our time
 	delay := p.delayForRamanujanFork(snap, header)
@@ -936,9 +936,9 @@ func (p *Parlia) SignRecently(chain consensus.ChainReader, parent *types.Header)
 	}
 
 	// Bail out if we're unauthorized to sign a block
-	if _, authorized := snap.Validators[p.val]; !authorized {
-		return true, errUnauthorizedValidator
-	}
+	// if _, authorized := snap.Validators[p.val]; !authorized {
+	// 	return true, errUnauthorizedValidator
+	// }
 
 	// If we're amongst the recent signers, wait for the next block
 	number := parent.Number.Uint64() + 1
