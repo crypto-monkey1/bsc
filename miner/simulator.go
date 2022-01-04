@@ -220,7 +220,7 @@ func (simulator *Simulator) simulateNextState() {
 }
 
 /*********************** Simulating on current state ***********************/
-func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, blockNumberToSimulate *big.Int, priorityTx *types.Transaction, txsToInject []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash) map[string]interface{} {
+func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, blockNumberToSimulate *big.Int, priorityTx *types.Transaction, txsToInject []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash, outputHashX1 bool) map[string]interface{} {
 	simulator.SimualtingOnState = true
 	log.Info("Simulator: New SimulateOnCurrentStatePriority call. checking if simulator is free...", "simualtingOnState", simulator.SimualtingOnState, "simualtingNextState", simulator.simualtingNextState, "victimHash", victimHash)
 
@@ -234,6 +234,7 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 	oneBlockBeforeSim = oneBlockBeforeSim.Sub(blockNumberToSimulate, common.Big1)
 	twoBlockBeforeSim := new(big.Int)
 	twoBlockBeforeSim = twoBlockBeforeSim.Sub(oneBlockBeforeSim, common.Big1)
+	blockX1Hashes := []common.Hash{}
 	if oneBlockBeforeSim.Cmp(currentBlockNum) == 0 {
 		parent = currentBlock
 		state, err = simulator.chain.StateAt(parent.Root())
@@ -255,6 +256,11 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 			procTimeCopyState := time.Since(tstartCopyState)
 			timeBlockReceived = simulator.currentEnv.timeBlockReceived
 			log.Info("Simulator: SimulateOnCurrentStatePriority, Two block before simulation", "procTimeCopyState", common.PrettyDuration(procTimeCopyState), "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
+			if outputHashX1 {
+				for _, tx := range simulator.currentEnv.block.Transactions() {
+					blockX1Hashes = append(blockX1Hashes, tx.Hash())
+				}
+			}
 		} else {
 			log.Warn("Simulator: SimulateOnCurrentStatePriority not busy, but simulated next state is not compatible with block to simulate", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
 			return nil
@@ -353,6 +359,7 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 	txArrayReceipts := []types.Receipt{}
 	allReceipts := []types.Receipt{}
 	victimReceipt := types.Receipt{}
+	allHashes := []common.Hash{}
 
 	highestGasPrice := big.NewInt(0)
 	returnedData := "0"
@@ -362,7 +369,7 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 		}
 	}
 	for i, receipt := range env.receipts {
-
+		allHashes = append(allHashes, receipt.TxHash)
 		if receipt.TxHash == priorityTx.Hash() {
 			txArrayReceipts = append(txArrayReceipts, *receipt)
 			highestGasPrice = env.receipts[i+1].GasPrice
@@ -393,6 +400,8 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 		"wrongBlock":           false,
 		"allReceipts":          allReceipts,
 		"victimReceipt":        victimReceipt,
+		"blockX1Hashes":        blockX1Hashes,
+		"allHashes":            allHashes,
 	}
 
 	return simulatorResult
@@ -866,7 +875,9 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 	//Testing from here
 	victimReceiptX2 := types.Receipt{}
 	txArrayReceipts := []types.Receipt{}
+	allHashesX2 := []common.Hash{}
 	for _, receipt := range x2Env.receipts {
+		allHashesX2 = append(allHashesX2, receipt.TxHash)
 		if receipt.TxHash == priorityX2Tx.Hash() {
 			txArrayReceipts = append(txArrayReceipts, *receipt)
 		}
@@ -1013,7 +1024,9 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 
 	keepAdding := true
 	returnedData := "0"
+	allHashesX3 := []common.Hash{}
 	for _, receipt := range x3Env.receipts {
+		allHashesX3 = append(allHashesX3, receipt.TxHash)
 		if keepAdding {
 			returnedReceipts = append(returnedReceipts, *receipt)
 		}
@@ -1042,6 +1055,8 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 		"allX3Receipts":     allX3Receipts,
 		"victimReceiptX2":   victimReceiptX2,
 		"victimReceiptX3":   victimReceiptX3,
+		"allHashesX2":       allHashesX2,
+		"allHashesX3":       allHashesX3,
 	}
 
 	return simulatorResult

@@ -506,8 +506,8 @@ func (s *Ethereum) SimulateOnCurrentState(addressesToReturnBalances []common.Add
 	return simulatorResult
 }
 
-func (s *Ethereum) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, blockNumberToSimulate *big.Int, priorityTx *types.Transaction, txsArray []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash) map[string]interface{} {
-	simulatorResult := s.simulator.SimulateOnCurrentStatePriority(addressesToReturnBalances, addressesToDeleteFromPending, blockNumberToSimulate, priorityTx, txsArray, stoppingHash, returnedDataHash, victimHash)
+func (s *Ethereum) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, blockNumberToSimulate *big.Int, priorityTx *types.Transaction, txsArray []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash, outputHashX1 bool) map[string]interface{} {
+	simulatorResult := s.simulator.SimulateOnCurrentStatePriority(addressesToReturnBalances, addressesToDeleteFromPending, blockNumberToSimulate, priorityTx, txsArray, stoppingHash, returnedDataHash, victimHash, outputHashX1)
 	s.simulator.SimualtingOnState = false
 	return simulatorResult
 }
