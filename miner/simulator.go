@@ -769,7 +769,7 @@ func (simulator *Simulator) SimulateOnCurrentStateBundle(addressesToReturnBalanc
 
 /*********************** Simulate costum next two states  ***********************/
 
-func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, x1BlockNumber *big.Int, priorityX2Tx *types.Transaction, x2TxsToInject []types.Transaction, x3TxsToInject []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash) map[string]interface{} {
+func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, x1BlockNumber *big.Int, priorityX2Tx *types.Transaction, x2TxsToInject []types.Transaction, x3TxsToInject []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash) map[string]interface{} {
 	//Phase0: make sure we have the right block (x+1)
 	tstart := time.Now()
 	log.Info("Simulator: Starting to simulate next two states", "timeReceivedX+1", simulator.timeBlockReceived, "timeNow", time.Now(), "victimHash", victimHash)
@@ -1013,7 +1013,6 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 	}
 
 	//get receipts
-	returnedReceipts := []types.Receipt{}
 
 	allX3Receipts := []types.Receipt{}
 	if dumpAllReceipts {
@@ -1022,32 +1021,34 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 		}
 	}
 
-	keepAdding := true
 	returnedData := "0"
 	allHashesX3 := []common.Hash{}
+	highestGasPriceX3 := big.NewInt(0)
 	for _, receipt := range x3Env.receipts {
 		allHashesX3 = append(allHashesX3, receipt.TxHash)
-		if keepAdding {
-			returnedReceipts = append(returnedReceipts, *receipt)
-		}
-
-		if receipt.TxHash == stopReceiptHash {
-			keepAdding = false
-		}
 
 		if receipt.TxHash == returnedDataHash {
 			returnedData = receipt.ReturnedData
 		}
 
+		oneOfUs := false
 		for _, tx := range x3TxsToInject {
 			if receipt.TxHash == tx.Hash() {
+				oneOfUs = true
 				txArrayReceipts = append(txArrayReceipts, *receipt)
 			}
 		}
+
+		if !oneOfUs {
+			if highestGasPriceX3.Cmp(receipt.GasPrice) == -1 {
+				highestGasPriceX3 = receipt.GasPrice
+			}
+		}
+
 	}
 
 	simulatorResult := map[string]interface{}{
-		"nextBlockReceipts": returnedReceipts,
+		"highestGasPriceX3": highestGasPriceX3,
 		"txArrayReceipts":   txArrayReceipts,
 		"balances":          balances,
 		"returnedData":      returnedData,

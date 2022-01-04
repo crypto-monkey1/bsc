@@ -524,8 +524,8 @@ func (s *Ethereum) SimulateOnCurrentStateBundle(addressesToReturnBalances []comm
 	return simulatorResult
 }
 
-func (s *Ethereum) SimulateNextTwoStates(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, x1BlockNumber *big.Int, priorityX2Tx *types.Transaction, x2TxsArray []types.Transaction, x3TxsArray []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash) map[string]interface{} {
-	return s.simulator.SimulateNextTwoStates(addressesToReturnBalances, addressesToDeleteFromPending, x1BlockNumber, priorityX2Tx, x2TxsArray, x3TxsArray, stoppingHash, stopReceiptHash, returnedDataHash, victimHash)
+func (s *Ethereum) SimulateNextTwoStates(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, x1BlockNumber *big.Int, priorityX2Tx *types.Transaction, x2TxsArray []types.Transaction, x3TxsArray []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash) map[string]interface{} {
+	return s.simulator.SimulateNextTwoStates(addressesToReturnBalances, addressesToDeleteFromPending, x1BlockNumber, priorityX2Tx, x2TxsArray, x3TxsArray, stoppingHash, returnedDataHash, victimHash)
 }
 
 // StartMining starts the miner with the given number of CPU threads. If mining
