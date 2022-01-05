@@ -6,6 +6,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 const (
@@ -14,7 +15,9 @@ const (
 )
 
 func (p *Parlia) delayForRamanujanFork(snap *Snapshot, header *types.Header) time.Duration {
+
 	delay := time.Until(time.Unix(int64(header.Time), 0)) // nolint: gosimple
+	log.Info("that's the delayForRamanujanFork", "delay", delay.String(), "headerTime", time.Unix(int64(header.Time), 0).String())
 	if p.chainConfig.IsRamanujan(header.Number) {
 		return delay
 	}
