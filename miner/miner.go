@@ -189,6 +189,7 @@ func (miner *Miner) Pending() (*types.Block, *state.StateDB) {
 			return pendingBlock, pendingState
 		}
 	}
+	log.Info("fallback to latest-1")
 	// fallback to latest block
 	block := miner.worker.chain.CurrentBlock()
 	if block == nil {
@@ -213,6 +214,7 @@ func (miner *Miner) PendingBlock() *types.Block {
 			return pendingBlock
 		}
 	}
+	log.Info("fallback to latest-2")
 	// fallback to latest block
 	return miner.worker.chain.CurrentBlock()
 }
