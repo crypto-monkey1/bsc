@@ -800,7 +800,7 @@ func (p *Parlia) Delay(chain consensus.ChainReader, header *types.Header) *time.
 		return nil
 	}
 	delay := p.delayForRamanujanFork(snap, header)
-	log.Info("that's the delay", "delay", delay.String())
+	log.Info("that's the delay", "delay", delay.String(), "period", p.config.Period)
 	// The blocking time should be no more than half of period
 	half := time.Duration(p.config.Period) * time.Second / 2
 	if delay > half {
