@@ -209,13 +209,11 @@ func (miner *Miner) Pending() (*types.Block, *state.StateDB) {
 // change between multiple method calls
 func (miner *Miner) PendingBlock() *types.Block {
 	if miner.worker.isRunning() {
-		log.Info("miner is running")
 		pendingBlock := miner.worker.pendingBlock()
 		if pendingBlock != nil {
 			return pendingBlock
 		}
 	}
-	log.Info("fallback to latest-2")
 	// fallback to latest block
 	return miner.worker.chain.CurrentBlock()
 }
