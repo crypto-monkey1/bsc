@@ -138,6 +138,7 @@ func (simulator *Simulator) mainLoop() {
 					break
 				}
 			}
+			simulator.gradeBlock()
 			simulator.currentEnv = &simEnvironment{}
 			simulator.simulateNextState()
 			simulator.simualtingNextState = false
@@ -145,6 +146,58 @@ func (simulator *Simulator) mainLoop() {
 		}
 
 	}
+}
+
+func (simulator *Simulator) gradeBlock() {
+	tstart := time.Now()
+
+	log.Info("Simulator: Grading block")
+	realBlock := simulator.chain.CurrentBlock()
+	if simulator.currentEnv == nil {
+		log.Info("Simulator: Grading block cannot be done. no sim transactions")
+		return
+	}
+	simBlock := simulator.currentEnv.block
+
+	if simBlock == nil {
+		log.Info("Simulator: Grading block cannot be done. no sim transactions")
+		return
+	}
+	diffIn1Not2, diffIn2Not1 := difference(realBlock.Transactions(), simBlock.Transactions())
+	procTime := time.Since(tstart)
+	numOfTxsInRealBlock := len(realBlock.Transactions())
+	numOfTxsInSimBlock := len(simBlock.Transactions())
+	if numOfTxsInRealBlock == 0 || numOfTxsInSimBlock == 0 {
+		log.Info("Simulator: Grading block cannot be done. no transactions", "numOfTxsInRealBlock", numOfTxsInRealBlock, "numOfTxsInSimBlock", numOfTxsInSimBlock)
+		return
+	}
+	simPercentOutOfReal := int64(100.0 * (1.0 - (float64(len(diffIn1Not2)) / float64(numOfTxsInRealBlock))))
+	extraTxPercentInSim := int64(100.0 * (float64(len(diffIn2Not1)) / float64(numOfTxsInSimBlock)))
+	validator := realBlock.Coinbase()
+	log.Info("Simulator: Grading done", "validator", validator, "simPercentOutOfReal", simPercentOutOfReal, "extraTxPercentInSim", extraTxPercentInSim, "numOfTxsInRealBlock", numOfTxsInRealBlock, "numOfTxsInSimBlock", numOfTxsInSimBlock, "diffInRealNotSim", len(diffIn1Not2), "diffInSimNotReal", len(diffIn2Not1), "procTime", common.PrettyDuration(procTime))
+}
+
+func difference(slice1 types.Transactions, slice2 types.Transactions) ([]common.Hash, []common.Hash) {
+	diffIn1Not2 := []common.Hash{}
+	diffIn2Not1 := []common.Hash{}
+	m := map[common.Hash]int{}
+
+	for _, s1Val := range slice1 {
+		m[s1Val.Hash()] = m[s1Val.Hash()] + 1
+	}
+	for _, s2Val := range slice2 {
+		m[s2Val.Hash()] = m[s2Val.Hash()] - 1
+	}
+
+	for mKey, mVal := range m {
+		if mVal == 1 {
+			diffIn1Not2 = append(diffIn1Not2, mKey)
+		} else if mVal == -1 {
+			diffIn2Not1 = append(diffIn2Not1, mKey)
+		}
+	}
+
+	return diffIn1Not2, diffIn2Not1
 }
 
 func (simulator *Simulator) simulateNextState() {
