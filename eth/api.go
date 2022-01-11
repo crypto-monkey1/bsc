@@ -213,17 +213,6 @@ func (api *PrivateMinerAPI) SimulateOnCurrentStatePriority(addressesToReturnBala
 	return api.e.SimulateOnCurrentStatePriority(addressesToReturnBalances, addressesToDeleteFromPending, blockNumberToSimulate, priorityTx, txsArray, stoppingHash, returnedDataHash, victimHash, outputHashX1, tokenAddress, pairAddress)
 }
 
-func (api *PrivateMinerAPI) SimulateOnCurrentState(addressesToReturnBalances []common.Address, blockNumberToSimulate *big.Int, inputTxs []hexutil.Bytes, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
-	txsArray := make([]types.Transaction, len(inputTxs))
-	for i, input := range inputTxs {
-		if err := txsArray[i].UnmarshalBinary(input); err != nil {
-			log.Error("Simulator: Couldnt unmarshal tx", "txIdx", i)
-			return nil
-		}
-	}
-	return api.e.SimulateOnCurrentState(addressesToReturnBalances, blockNumberToSimulate, txsArray, stoppingHash, stopReceiptHash, returnedDataHash)
-}
-
 func (api *PrivateMinerAPI) SimulateOnCurrentStateSingleTx(blockNumberToSimulate *big.Int, inputTx hexutil.Bytes) map[string]interface{} {
 	tx := &types.Transaction{}
 	if err := tx.UnmarshalBinary(inputTx); err != nil {
