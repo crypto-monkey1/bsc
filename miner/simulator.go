@@ -273,7 +273,7 @@ func (simulator *Simulator) simulateNextState() {
 }
 
 /*********************** Simulating on current state ***********************/
-func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, blockNumberToSimulate *big.Int, priorityTx *types.Transaction, txsToInject []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash, outputHashX1 bool) map[string]interface{} {
+func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, blockNumberToSimulate *big.Int, priorityTx *types.Transaction, txsToInject []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash, outputHashX1 bool, tokenAddress common.Address, pairAddress common.Address) map[string]interface{} {
 	simulator.SimualtingOnState = true
 	log.Info("Simulator: New SimulateOnCurrentStatePriority call. checking if simulator is free...", "simualtingOnState", simulator.SimualtingOnState, "simualtingNextState", simulator.simualtingNextState, "victimHash", victimHash)
 
@@ -413,6 +413,7 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 	allReceipts := []types.Receipt{}
 	victimReceipt := types.Receipt{}
 	allHashes := []common.Hash{}
+	realtedReceipts := []types.Receipt{}
 
 	highestGasPrice := big.NewInt(0)
 	returnedData := "0"
@@ -422,6 +423,9 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 		}
 	}
 	for i, receipt := range env.receipts {
+		if checkReceiptRelation(receipt, tokenAddress, pairAddress) {
+			realtedReceipts = append(realtedReceipts, *receipt)
+		}
 		allHashes = append(allHashes, receipt.TxHash)
 		if receipt.TxHash == priorityTx.Hash() {
 			txArrayReceipts = append(txArrayReceipts, *receipt)
@@ -446,6 +450,7 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 
 	simulatorResult := map[string]interface{}{
 		"highestGasPrice":      highestGasPrice,
+		"realtedReceipts":      realtedReceipts,
 		"txArrayReceipts":      txArrayReceipts,
 		"balances":             balances,
 		"returnedData":         returnedData,
@@ -458,6 +463,17 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 	}
 
 	return simulatorResult
+}
+
+func checkReceiptRelation(receipt *types.Receipt, tokenAddress common.Address, pairAddress common.Address) bool {
+	if receipt.Logs != nil {
+		for _, log := range receipt.Logs {
+			if log.Address == tokenAddress || log.Address == pairAddress {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 /*********************** Simulating on current state ***********************/
@@ -822,7 +838,7 @@ func (simulator *Simulator) SimulateOnCurrentStateBundle(addressesToReturnBalanc
 
 /*********************** Simulate costum next two states  ***********************/
 
-func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, x1BlockNumber *big.Int, priorityX2Tx *types.Transaction, x2TxsToInject []types.Transaction, x3TxsToInject []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash) map[string]interface{} {
+func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, x1BlockNumber *big.Int, priorityX2Tx *types.Transaction, x2TxsToInject []types.Transaction, x3TxsToInject []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash, tokenAddress common.Address, pairAddress common.Address) map[string]interface{} {
 	//Phase0: make sure we have the right block (x+1)
 	tstart := time.Now()
 	log.Info("Simulator: Starting to simulate next two states", "timeReceivedX+1", simulator.timeBlockReceived, "timeNow", time.Now(), "victimHash", victimHash)
@@ -928,8 +944,12 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 	//Testing from here
 	victimReceiptX2 := types.Receipt{}
 	txArrayReceipts := []types.Receipt{}
+	relatedReceiptsX2 := []types.Receipt{}
 	allHashesX2 := []common.Hash{}
 	for _, receipt := range x2Env.receipts {
+		if checkReceiptRelation(receipt, tokenAddress, pairAddress) {
+			relatedReceiptsX2 = append(relatedReceiptsX2, *receipt)
+		}
 		allHashesX2 = append(allHashesX2, receipt.TxHash)
 		if receipt.TxHash == priorityX2Tx.Hash() {
 			txArrayReceipts = append(txArrayReceipts, *receipt)
@@ -1074,10 +1094,14 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 		}
 	}
 
+	relatedReceiptsX3 := []types.Receipt{}
 	returnedData := "0"
 	allHashesX3 := []common.Hash{}
 	highestGasPriceX3 := big.NewInt(0)
 	for _, receipt := range x3Env.receipts {
+		if checkReceiptRelation(receipt, tokenAddress, pairAddress) {
+			relatedReceiptsX3 = append(relatedReceiptsX3, *receipt)
+		}
 		allHashesX3 = append(allHashesX3, receipt.TxHash)
 
 		if receipt.TxHash == returnedDataHash {
@@ -1106,7 +1130,9 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 		"balances":          balances,
 		"returnedData":      returnedData,
 		"allX2Receipts":     allX2Receipts,
+		"relatedReceiptsX2": relatedReceiptsX2,
 		"allX3Receipts":     allX3Receipts,
+		"relatedReceiptsX3": relatedReceiptsX3,
 		"victimReceiptX2":   victimReceiptX2,
 		"victimReceiptX3":   victimReceiptX3,
 		"allHashesX2":       allHashesX2,
