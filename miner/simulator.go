@@ -35,6 +35,51 @@ type SignerTxFn func(accounts.Account, *types.Transaction, *big.Int) (*types.Tra
 const offsetInMs = 0
 const dumpAllReceipts = false
 
+type CostumLog struct {
+	// Consensus fields:
+	// address of the contract that generated the event
+	Address common.Address `json:"address" gencodec:"required"`
+	// list of topics provided by the contract.
+	Topics []common.Hash `json:"topics" gencodec:"required"`
+	// supplied by the contract, usually ABI-encoded
+	Data string `json:"data" gencodec:"required"`
+}
+
+type CostumReceipt struct {
+	// Consensus fields: These fields are defined by the Yellow Paper
+	Type              uint8        `json:"type,omitempty"`
+	PostState         []byte       `json:"root"`
+	Status            uint64       `json:"status"`
+	CumulativeGasUsed uint64       `json:"cumulativeGasUsed" gencodec:"required"`
+	Logs              []*CostumLog `json:"logs"              gencodec:"required"`
+
+	// Implementation fields: These fields are added by geth when processing a transaction.
+	// They are stored in the chain database.
+	TxHash          common.Hash    `json:"transactionHash" gencodec:"required"`
+	ContractAddress common.Address `json:"contractAddress"`
+	GasUsed         uint64         `json:"gasUsed" gencodec:"required"`
+
+	// Inclusion information: These fields provide information about the inclusion of the
+	// transaction corresponding to this receipt.
+	BlockHash        common.Hash `json:"blockHash,omitempty"`
+	BlockNumber      *big.Int    `json:"blockNumber,omitempty"`
+	TransactionIndex uint        `json:"transactionIndex"`
+
+	ReturnedData string `json:"returnedData"`
+	RevertReason string `json:"revertReason"`
+
+	Timestamp int64 `json:"timestamp"`
+
+	Gas      uint64   `json:"gas"`
+	GasPrice *big.Int `json:"gasPrice"`
+
+	To    *common.Address `json:"to"`
+	From  *common.Address `json:"from"`
+	Value *big.Int        `json:"value"`
+	Nonce uint64          `json:"nonce"`
+	Data  string          `json:"data"`
+}
+
 // environment is the worker's current environment and holds all of the current state information.
 type simEnvironment struct {
 	signer types.Signer
@@ -46,9 +91,10 @@ type simEnvironment struct {
 	tcount    int            // tx count in cycle
 	gasPool   *core.GasPool  // available gas used to pack transactions
 
-	header   *types.Header
-	txs      []*types.Transaction
-	receipts []*types.Receipt
+	header         *types.Header
+	txs            []*types.Transaction
+	costumReceipts []*CostumReceipt
+	receipts       []*types.Receipt
 
 	block *types.Block
 
@@ -273,7 +319,7 @@ func (simulator *Simulator) simulateNextState() {
 }
 
 /*********************** Simulating on current state ***********************/
-func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, blockNumberToSimulate *big.Int, priorityTx *types.Transaction, txsToInject []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash, outputHashX1 bool) map[string]interface{} {
+func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, blockNumberToSimulate *big.Int, priorityTx *types.Transaction, txsToInject []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash, outputHashX1 bool, tokenAddress common.Address, pairAddress common.Address) map[string]interface{} {
 	simulator.SimualtingOnState = true
 	log.Info("Simulator: New SimulateOnCurrentStatePriority call. checking if simulator is free...", "simualtingOnState", simulator.SimualtingOnState, "simualtingNextState", simulator.simualtingNextState, "victimHash", victimHash)
 
@@ -409,23 +455,27 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 	}
 
 	//get receipts
-	txArrayReceipts := []types.Receipt{}
-	allReceipts := []types.Receipt{}
-	victimReceipt := types.Receipt{}
+	txArrayReceipts := []CostumReceipt{}
+	allReceipts := []CostumReceipt{}
+	victimReceipt := CostumReceipt{}
 	allHashes := []common.Hash{}
+	realtedReceipts := []CostumReceipt{}
 
 	highestGasPrice := big.NewInt(0)
 	returnedData := "0"
 	if dumpAllReceipts {
-		for _, receipt := range env.receipts {
+		for _, receipt := range env.costumReceipts {
 			allReceipts = append(allReceipts, *receipt)
 		}
 	}
-	for i, receipt := range env.receipts {
+	for i, receipt := range env.costumReceipts {
+		if checkReceiptRelation(receipt, tokenAddress, pairAddress) {
+			realtedReceipts = append(realtedReceipts, *receipt)
+		}
 		allHashes = append(allHashes, receipt.TxHash)
 		if receipt.TxHash == priorityTx.Hash() {
 			txArrayReceipts = append(txArrayReceipts, *receipt)
-			highestGasPrice = env.receipts[i+1].GasPrice
+			highestGasPrice = env.costumReceipts[i+1].GasPrice
 		}
 
 		if receipt.TxHash == returnedDataHash {
@@ -446,6 +496,7 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 
 	simulatorResult := map[string]interface{}{
 		"highestGasPrice":      highestGasPrice,
+		"realtedReceipts":      realtedReceipts,
 		"txArrayReceipts":      txArrayReceipts,
 		"balances":             balances,
 		"returnedData":         returnedData,
@@ -460,161 +511,15 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 	return simulatorResult
 }
 
-/*********************** Simulating on current state ***********************/
-func (simulator *Simulator) SimulateOnCurrentState(addressesToReturnBalances []common.Address, blockNumberToSimulate *big.Int, txsToInject []types.Transaction, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash) map[string]interface{} {
-	simulator.SimualtingOnState = true
-	log.Info("Simulator: New SimulateOnCurrentState call. checking if simulator is free...", "simualtingOnState", simulator.SimualtingOnState, "simualtingNextState", simulator.simualtingNextState)
-	var parent *types.Block
-	var state *state.StateDB
-	var err error
-	var timeBlockReceived time.Time
-	currentBlock := simulator.chain.CurrentBlock()
-	currentBlockNum := currentBlock.Number()
-	oneBlockBeforeSim := new(big.Int)
-	oneBlockBeforeSim = oneBlockBeforeSim.Sub(blockNumberToSimulate, common.Big1)
-	twoBlockBeforeSim := new(big.Int)
-	twoBlockBeforeSim = twoBlockBeforeSim.Sub(oneBlockBeforeSim, common.Big1)
-	if oneBlockBeforeSim.Cmp(currentBlockNum) == 0 {
-		parent = currentBlock
-		state, err = simulator.chain.StateAt(parent.Root())
-		timeBlockReceived = time.Time{}
-		log.Info("Simulator: SimulateOnCurrentState, One block before simulation", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
-		if err != nil {
-			log.Error("Simulator: SimulateOnCurrentState Failed to create simulator context", "err", err)
-			return nil
-		}
-	} else if twoBlockBeforeSim.Cmp(currentBlockNum) == 0 {
-		if simulator.simualtingNextState {
-			log.Warn("Simulator: SimulateOnCurrentState Busy simulating next state", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
-			return nil
-		}
-		if oneBlockBeforeSim.Cmp(simulator.currentEnv.block.Number()) == 0 {
-			parent = simulator.currentEnv.block
-			tstartCopyState := time.Now()
-			state = simulator.currentEnv.state.Copy()
-			procTimeCopyState := time.Since(tstartCopyState)
-			timeBlockReceived = simulator.currentEnv.timeBlockReceived
-			log.Info("Simulator: SimulateOnCurrentState, Two block before simulation", "procTimeCopyState", common.PrettyDuration(procTimeCopyState), "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
-		} else {
-			log.Warn("Simulator: SimulateOnCurrentState not busy, but simulated next state is not compatible with block to simulate", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
-			return nil
-		}
-	} else {
-		log.Warn("Simulator: SimulateOnCurrentState Current block number is weird", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum)
-		return nil
-	}
-
-	tstart := time.Now()
-
-	log.Info("Simulator: SimulateOnCurrentState Starting to simulate on top of current state")
-	num := parent.Number()
-	header := &types.Header{
-		ParentHash: parent.Hash(),
-		Number:     num.Add(num, common.Big1),
-		GasLimit:   core.CalcGasLimit(parent, simulator.config.GasFloor, simulator.config.GasCeil),
-		Time:       parent.Time() + 3, //FIXME:Need to take it from config for future changes...
-		Difficulty: big.NewInt(2),
-	}
-	nextValidator := simulator.validators[(parent.NumberU64()+1)%uint64(len(simulator.validators))]
-	log.Info("Simulator: Got next validator", "currentValidator", parent.Coinbase(), "currentDifficulty", parent.Difficulty(), "nextValidator", nextValidator)
-	header.Coinbase = nextValidator
-	env := &simEnvironment{
-		signer:    types.MakeSigner(simulator.chainConfig, header.Number),
-		state:     state,
-		ancestors: mapset.NewSet(),
-		family:    mapset.NewSet(),
-		uncles:    mapset.NewSet(),
-		header:    header,
-	}
-	env.state.StartPrefetcher("miner")
-	// Keep track of transactions which return errors so they can be removed
-	env.tcount = 0
-
-	pending, err := simulator.eth.TxPool().Pending()
-	if err != nil {
-		log.Error("Simulator: Failed to fetch pending transactions", "err", err)
-		return nil
-	}
-
-	//Inject txs
-	if len(txsToInject) > 0 {
-		for i, _ := range txsToInject {
-			from, _ := types.Sender(env.signer, &txsToInject[i])
-			delete(pending, from)
-		}
-		for i, _ := range txsToInject {
-			//Set time of sending to now in order for it to be sorted last
-			txsToInject[i].SetTimeNowPlusOffset(300)
-			from, _ := types.Sender(env.signer, &txsToInject[i])
-			if len(pending[from]) == 0 {
-				txsArray := make(types.Transactions, 0, 1)
-				txsArray = append(txsArray, &txsToInject[i])
-				pending[from] = txsArray
-				log.Info("Simulator: Injected a tx to pending (first tx from)", "from", from, "hash", txsToInject[i].Hash())
-			} else {
-				pending[from] = append(pending[from], &txsToInject[i])
-				log.Info("Simulator: Injected a tx to pending (from exist in pending)", "from", from, "hash", txsToInject[i].Hash())
+func checkReceiptRelation(receipt *CostumReceipt, tokenAddress common.Address, pairAddress common.Address) bool {
+	if receipt.Logs != nil {
+		for _, log := range receipt.Logs {
+			if log.Address == tokenAddress || log.Address == pairAddress {
+				return true
 			}
 		}
 	}
-
-	if len(pending) != 0 {
-		txs := types.NewTransactionsByPriceAndNonceForSimulator(env.signer, pending, timeBlockReceived, simulator.timeOffset, false)
-		if simulator.commitTransactions(env, txs, nil, parent.Header(), stoppingHash) {
-			log.Error("Simulator: Something went wrong with commitTransactions")
-			return nil
-		}
-	}
-
-	env.state.StopPrefetcher()
-	env.block = types.NewBlock(env.header, env.txs, nil, env.receipts, trie.NewStackTrie(nil))
-	procTime := time.Since(tstart)
-	log.Info("Simulator: Finished simulating on current state", "blockNumber", env.block.Number(), "txs", len(env.block.Transactions()), "gasUsed", env.block.GasUsed(), "procTime", common.PrettyDuration(procTime))
-
-	//Process output
-	//get balances
-	balances := make([]*big.Int, len(addressesToReturnBalances))
-	for idx, address := range addressesToReturnBalances {
-		balances[idx] = env.state.GetBalance(address)
-	}
-
-	//get receipts
-	returnedReceipts := []types.Receipt{}
-	txArrayReceipts := []types.Receipt{}
-
-	keepAdding := true
-	returnedData := "0"
-	for _, receipt := range env.receipts {
-		if keepAdding {
-			returnedReceipts = append(returnedReceipts, *receipt)
-		}
-
-		if receipt.TxHash == stopReceiptHash {
-			keepAdding = false
-		}
-
-		if receipt.TxHash == returnedDataHash {
-			returnedData = receipt.ReturnedData
-		}
-
-		for _, tx := range txsToInject {
-			if receipt.TxHash == tx.Hash() {
-				txArrayReceipts = append(txArrayReceipts, *receipt)
-			}
-		}
-
-	}
-
-	simulatorResult := map[string]interface{}{
-		"nextBlockReceipts":    returnedReceipts,
-		"txArrayReceipts":      txArrayReceipts,
-		"balances":             balances,
-		"returnedData":         returnedData,
-		"currentStateNotReady": false,
-		"wrongBlock":           false,
-	}
-
-	return simulatorResult
+	return false
 }
 
 /*********************** Simulating on current state single tx***********************/
@@ -698,13 +603,15 @@ func (simulator *Simulator) SimulateOnCurrentStateSingleTx(blockNumberToSimulate
 		log.Error("Simulator: Failed Apply tx", "err", err)
 		return nil
 	}
+	from, _ := types.Sender(env.signer, tx)
+	costumReceipt := adjustReceipt(receipt, from)
 	bloomProcessors.Close()
 
 	procTime := time.Since(tstart)
 	log.Info("Simulator: Finished simulating single tx on current state", "blockNumber", env.header.Number, "gasUsed", receipt.GasUsed, "procTime", common.PrettyDuration(procTime))
 
 	simulatorResult := map[string]interface{}{
-		"receipt":              receipt,
+		"receipt":              costumReceipt,
 		"currentStateNotReady": false,
 		"wrongBlock":           false,
 	}
@@ -786,7 +693,7 @@ func (simulator *Simulator) SimulateOnCurrentStateBundle(addressesToReturnBalanc
 
 	processorCapacity := 1
 	bloomProcessors := core.NewAsyncReceiptBloomGenerator(processorCapacity)
-	returnedReceipts := []types.Receipt{}
+	returnedReceipts := []CostumReceipt{}
 	for _, tx := range txs {
 		env.state.Prepare(tx.Hash(), common.Hash{}, env.tcount)
 		receipt, err := core.ApplyTransactionForSimulator(simulator.chainConfig, simulator.chain, &env.header.Coinbase, env.gasPool, env.state, env.header, simulator.currentEnv.header, &tx, &env.header.GasUsed, *simulator.chain.GetVMConfig(), bloomProcessors)
@@ -794,8 +701,10 @@ func (simulator *Simulator) SimulateOnCurrentStateBundle(addressesToReturnBalanc
 			log.Error("Simulator: Failed Apply tx", "err", err, "txHash", tx.Hash())
 			return nil
 		}
+		from, _ := types.Sender(env.signer, &tx)
+		costumReceipt := adjustReceipt(receipt, from)
 		log.Info("Simulator: Applied bundle tx", "txHash", tx.Hash())
-		returnedReceipts = append(returnedReceipts, *receipt)
+		returnedReceipts = append(returnedReceipts, costumReceipt)
 		env.tcount++
 	}
 
@@ -822,7 +731,7 @@ func (simulator *Simulator) SimulateOnCurrentStateBundle(addressesToReturnBalanc
 
 /*********************** Simulate costum next two states  ***********************/
 
-func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, x1BlockNumber *big.Int, priorityX2Tx *types.Transaction, x2TxsToInject []types.Transaction, x3TxsToInject []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash) map[string]interface{} {
+func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, x1BlockNumber *big.Int, priorityX2Tx *types.Transaction, x2TxsToInject []types.Transaction, x3TxsToInject []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash, tokenAddress common.Address, pairAddress common.Address) map[string]interface{} {
 	//Phase0: make sure we have the right block (x+1)
 	tstart := time.Now()
 	log.Info("Simulator: Starting to simulate next two states", "timeReceivedX+1", simulator.timeBlockReceived, "timeNow", time.Now(), "victimHash", victimHash)
@@ -926,10 +835,14 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 	firstStateProcTime := time.Since(tstart)
 	log.Info("Simulator: Finished simulating first state", "blockNumber", x2Env.block.Number(), "txs", len(x2Env.block.Transactions()), "gasUsed", x2Env.block.GasUsed(), "procTime", common.PrettyDuration(firstStateProcTime))
 	//Testing from here
-	victimReceiptX2 := types.Receipt{}
-	txArrayReceipts := []types.Receipt{}
+	victimReceiptX2 := CostumReceipt{}
+	txArrayReceipts := []CostumReceipt{}
+	relatedReceiptsX2 := []CostumReceipt{}
 	allHashesX2 := []common.Hash{}
-	for _, receipt := range x2Env.receipts {
+	for _, receipt := range x2Env.costumReceipts {
+		if checkReceiptRelation(receipt, tokenAddress, pairAddress) {
+			relatedReceiptsX2 = append(relatedReceiptsX2, *receipt)
+		}
 		allHashesX2 = append(allHashesX2, receipt.TxHash)
 		if receipt.TxHash == priorityX2Tx.Hash() {
 			txArrayReceipts = append(txArrayReceipts, *receipt)
@@ -949,9 +862,9 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 			}
 		}
 	}
-	allX2Receipts := []types.Receipt{}
+	allX2Receipts := []CostumReceipt{}
 	if dumpAllReceipts {
-		for _, receipt := range x2Env.receipts {
+		for _, receipt := range x2Env.costumReceipts {
 			allX2Receipts = append(allX2Receipts, *receipt)
 		}
 	}
@@ -1041,8 +954,8 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 	log.Info("Simulator: Finished simulating two states", "x3BlockNumber", x3Env.block.Number(), "txs", len(x3Env.block.Transactions()), "gasUsed", x3Env.block.GasUsed(), "procTime", common.PrettyDuration(procTime))
 
 	//Testing from here
-	victimReceiptX3 := types.Receipt{}
-	for _, receipt := range x3Env.receipts {
+	victimReceiptX3 := CostumReceipt{}
+	for _, receipt := range x3Env.costumReceipts {
 		if receipt.TxHash == victimHash {
 			victimReceiptX3 = *receipt
 		}
@@ -1067,17 +980,21 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 
 	//get receipts
 
-	allX3Receipts := []types.Receipt{}
+	allX3Receipts := []CostumReceipt{}
 	if dumpAllReceipts {
-		for _, receipt := range x3Env.receipts {
+		for _, receipt := range x3Env.costumReceipts {
 			allX3Receipts = append(allX3Receipts, *receipt)
 		}
 	}
 
+	relatedReceiptsX3 := []CostumReceipt{}
 	returnedData := "0"
 	allHashesX3 := []common.Hash{}
 	highestGasPriceX3 := big.NewInt(0)
-	for _, receipt := range x3Env.receipts {
+	for _, receipt := range x3Env.costumReceipts {
+		if checkReceiptRelation(receipt, tokenAddress, pairAddress) {
+			relatedReceiptsX3 = append(relatedReceiptsX3, *receipt)
+		}
 		allHashesX3 = append(allHashesX3, receipt.TxHash)
 
 		if receipt.TxHash == returnedDataHash {
@@ -1106,7 +1023,9 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 		"balances":          balances,
 		"returnedData":      returnedData,
 		"allX2Receipts":     allX2Receipts,
+		"relatedReceiptsX2": relatedReceiptsX2,
 		"allX3Receipts":     allX3Receipts,
+		"relatedReceiptsX3": relatedReceiptsX3,
 		"victimReceiptX2":   victimReceiptX2,
 		"victimReceiptX3":   victimReceiptX3,
 		"allHashesX2":       allHashesX2,
@@ -1220,11 +1139,51 @@ func (simulator *Simulator) commitTransaction(env *simEnvironment, tx *types.Tra
 		env.state.RevertToSnapshot(snap)
 		return err
 	}
+	from, _ := types.Sender(env.signer, tx)
+	costumReceipt := adjustReceipt(receipt, from)
 
 	env.txs = append(env.txs, tx)
 	env.receipts = append(env.receipts, receipt)
+	env.costumReceipts = append(env.costumReceipts, &costumReceipt)
 
 	return nil
+}
+
+func adjustReceipt(receipt *types.Receipt, from common.Address) CostumReceipt {
+	costumLogs := []*CostumLog{}
+	for _, log := range receipt.Logs {
+		costumLog := CostumLog{
+			Address: log.Address,
+			Topics:  log.Topics,
+			Data:    hexutil.Encode(log.Data),
+		}
+		costumLogs = append(costumLogs, &costumLog)
+	}
+
+	costumReceipt := CostumReceipt{
+		Type:              receipt.Type,
+		PostState:         receipt.PostState,
+		Status:            receipt.Status,
+		CumulativeGasUsed: receipt.CumulativeGasUsed,
+		Logs:              costumLogs,
+		TxHash:            receipt.TxHash,
+		ContractAddress:   receipt.ContractAddress,
+		GasUsed:           receipt.GasUsed,
+		BlockHash:         receipt.BlockHash,
+		BlockNumber:       receipt.BlockNumber,
+		TransactionIndex:  receipt.TransactionIndex,
+		ReturnedData:      receipt.ReturnedData,
+		RevertReason:      receipt.RevertReason,
+		Timestamp:         receipt.Timestamp,
+		Gas:               receipt.Gas,
+		GasPrice:          receipt.GasPrice,
+		To:                receipt.To,
+		From:              &from,
+		Value:             receipt.Value,
+		Nonce:             receipt.Nonce,
+		Data:              hexutil.Encode(receipt.Data),
+	}
+	return costumReceipt
 }
 
 /*********************** Block rewards txs ***********************/
