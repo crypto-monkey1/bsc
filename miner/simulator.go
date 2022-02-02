@@ -221,7 +221,7 @@ func (simulator *Simulator) gradeBlock() {
 	simPercentOutOfReal := int64(100.0 * (1.0 - (float64(len(diffIn1Not2)) / float64(numOfTxsInRealBlock))))
 	extraTxPercentInSim := int64(100.0 * (float64(len(diffIn2Not1)) / float64(numOfTxsInSimBlock)))
 	validator := realBlock.Coinbase()
-	log.Info("Simulator: Grading done", "validator", validator, "simPercentOutOfReal", simPercentOutOfReal, "extraTxPercentInSim", extraTxPercentInSim, "numOfTxsInRealBlock", numOfTxsInRealBlock, "numOfTxsInSimBlock", numOfTxsInSimBlock, "diffInRealNotSim", len(diffIn1Not2), "diffInSimNotReal", len(diffIn2Not1), "blockProcessingTime", blockProcessingTime, "procTime", common.PrettyDuration(procTime))
+	log.Info("Simulator: Grading done", "validator", validator, "simPercentOutOfReal", simPercentOutOfReal, "extraTxPercentInSim", extraTxPercentInSim, "numOfTxsInRealBlock", numOfTxsInRealBlock, "numOfTxsInSimBlock", numOfTxsInSimBlock, "diffInRealNotSim", len(diffIn1Not2), "diffInSimNotReal", len(diffIn2Not1), "blockProcessingTime", blockProcessingTime.Milliseconds(), "procTime", common.PrettyDuration(procTime))
 }
 
 func difference(slice1 types.Transactions, slice2 types.Transactions) ([]common.Hash, []common.Hash) {
