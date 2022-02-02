@@ -35,6 +35,12 @@ type SignerTxFn func(accounts.Account, *types.Transaction, *big.Int) (*types.Tra
 const offsetInMs = 0
 const dumpAllReceipts = false
 
+//calibration params
+const percentageSteps = 0.05
+const minProcessingTime = 50
+const maxProcessingTime = 3000
+const numOfTxsForUpdate = 20
+
 type CostumLog struct {
 	// Consensus fields:
 	// address of the contract that generated the event
@@ -120,7 +126,13 @@ type Simulator struct {
 	timeBlockReceived   time.Time
 	// simLogger           *logrus.Logger
 	// simLoggerPath       string
-	validators []common.Address
+	validators      []common.Address
+	validatorParams []ValidatorParams
+}
+
+type ValidatorParams struct {
+	address       common.Address
+	offsetPercent float64
 }
 
 func NewSimulator(eth Backend, chainConfig *params.ChainConfig, config *Config, ethAPI *ethapi.PublicBlockChainAPI, simEtherbase common.Address, signTxFn SignerTxFn) *Simulator {
@@ -146,24 +158,10 @@ func NewSimulator(eth Backend, chainConfig *params.ChainConfig, config *Config, 
 		SimualtingOnState:   false,
 		// simLogger:           logrus.New(),
 	}
-	// path, err := os.Getwd()
-	// if err != nil {
-	// 	log.Error("Couldnt get current directory path")
-	// }
-	// path = path + "/../gethSimLogs"
-	// log.Info("Creating logs dir", "path", path)
-	// err = os.MkdirAll(path, os.ModePerm)
-	// if err != nil {
-	// 	log.Error("Couldnt create logs dir")
-	// }
-	// simulator.simLoggerPath = path + "/simulatedBlocks.log"
-	// simulator.simLogger.SetFormatter(&logrus.JSONFormatter{})
-	// file, err := os.OpenFile(simulator.simLoggerPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	// if err == nil {
-	// 	simulator.simLogger.Out = file
-	// } else {
-	// 	simulator.simLogger.Info("Failed to log to file, using default stderr")
-	// }
+
+	//Init validators struct
+	simulator.validators, _ = simulator.getCurrentValidators(simulator.chain.CurrentBlock().Hash())
+	simulator.updateValidatorParams(simulator.validators)
 	simulator.chainHeadSub = simulator.eth.BlockChain().SubscribeChainHeadEvent(simulator.chainHeadCh)
 	log.Info("Simulator: Initialized")
 	go simulator.mainLoop()
@@ -222,6 +220,26 @@ func (simulator *Simulator) gradeBlock() {
 	extraTxPercentInSim := int64(100.0 * (float64(len(diffIn2Not1)) / float64(numOfTxsInSimBlock)))
 	validator := realBlock.Coinbase()
 	log.Info("Simulator: Grading done", "validator", validator, "simPercentOutOfReal", simPercentOutOfReal, "extraTxPercentInSim", extraTxPercentInSim, "numOfTxsInRealBlock", numOfTxsInRealBlock, "numOfTxsInSimBlock", numOfTxsInSimBlock, "diffInRealNotSim", len(diffIn1Not2), "diffInSimNotReal", len(diffIn2Not1), "blockProcessingTime", blockProcessingTime.Milliseconds(), "procTime", common.PrettyDuration(procTime))
+
+	percentageAddition := 0.0
+	if len(diffIn1Not2) > numOfTxsForUpdate {
+		percentageAddition += percentageSteps
+	}
+	if len(diffIn2Not1) > numOfTxsForUpdate {
+		percentageAddition -= percentageSteps
+	}
+
+	for i, val := range simulator.validatorParams {
+		if val.address == validator {
+			log.Info("Simulator: current validator offst percentage", "validator", validator, "offsetPercent", val.offsetPercent)
+			if percentageAddition > 0 || percentageAddition < 0 {
+				simulator.validatorParams[i].offsetPercent += percentageAddition
+				log.Info("Simulator: updating validator offst percentage", "validator", validator, "offsetPercent", val.offsetPercent)
+			}
+			break
+		}
+	}
+
 }
 
 func difference(slice1 types.Transactions, slice2 types.Transactions) ([]common.Hash, []common.Hash) {
@@ -253,6 +271,8 @@ func (simulator *Simulator) simulateNextState() {
 
 	log.Info("Simulator: Starting to simulate next state")
 	parent := simulator.chain.CurrentBlock()
+	timeBlockReceived := parent.ReceivedAt
+	blockProcessingTime := time.Since(timeBlockReceived).Milliseconds()
 	num := parent.Number()
 	header := &types.Header{
 		ParentHash: parent.Hash(),
@@ -288,26 +308,42 @@ func (simulator *Simulator) simulateNextState() {
 		log.Error("Simulator: Failed to get current validators set", "err", err)
 		return
 	}
+	simulator.updateValidatorParams(simulator.validators)
 	sort.Sort(validatorsAscending(simulator.validators))
 	log.Info("Simulator: Got validators set", "validators", simulator.validators)
 	nextValidator := simulator.validators[(parent.NumberU64()+1)%uint64(len(simulator.validators))]
 	log.Info("Simulator: Got next validator", "currentValidator", parent.Coinbase(), "currentDifficulty", parent.Difficulty(), "nextValidator", nextValidator)
 	header.Coinbase = nextValidator
-	if nextValidator == common.HexToAddress("0x8b6C8fd93d6F4CeA42Bbb345DBc6F0DFdb5bEc73") {
-		sleepingTime := 1000
-		log.Info("Simulator: Going to sleep", "nextValidator", nextValidator, "timeBlockReceived", env.timeBlockReceived, "sleepingTime", sleepingTime)
-		time.Sleep(time.Duration(sleepingTime * 1e6))
-		env.timeBlockReceived = time.Now()
-		log.Info("Simulator: Awake", "nextValidator", nextValidator, "timeBlockReceived", env.timeBlockReceived, "sleepingTime", sleepingTime)
+
+	for _, val := range simulator.validatorParams {
+		if val.address == nextValidator {
+			log.Info("Simulator: Validator params", "nextValidator", nextValidator, "timeBlockReceived", env.timeBlockReceived, "blockProcessingTime", blockProcessingTime, "val.offsetPercent", val.offsetPercent)
+			if val.offsetPercent > 0 {
+				sleepingTime := int64(float64(blockProcessingTime) * val.offsetPercent)
+				if maxProcessingTime < sleepingTime+blockProcessingTime {
+					sleepingTime = maxProcessingTime - blockProcessingTime
+				}
+				log.Info("Simulator: Going to sleep", "nextValidator", nextValidator, "timeBlockReceived", env.timeBlockReceived, "blockProcessingTime", blockProcessingTime, "val.offsetPercent", val.offsetPercent, "sleepingTime", sleepingTime)
+				time.Sleep(time.Duration(sleepingTime * 1e6))
+				env.timeBlockReceived = time.Now()
+				log.Info("Simulator: Awake", "nextValidator", nextValidator, "timeBlockReceived", env.timeBlockReceived, "sleepingTime", sleepingTime)
+			} else if val.offsetPercent < 0 {
+				minusToOffset := int64(float64(blockProcessingTime) * val.offsetPercent)
+				if minProcessingTime > blockProcessingTime+minusToOffset {
+					minusToOffset = -1 * (blockProcessingTime - minProcessingTime)
+					if minusToOffset > 0 {
+						minusToOffset = 0
+					}
+				}
+				d := time.Duration(minusToOffset * 1e6)
+				log.Info("Simulator: reducing processing time", "nextValidator", nextValidator, "timeBlockReceived", env.timeBlockReceived, "blockProcessingTime", blockProcessingTime, "val.offsetPercent", val.offsetPercent, "minusToOffset", minusToOffset, "d", d)
+				env.timeBlockReceived = env.timeBlockReceived.Add(time.Duration(minusToOffset * 1e6))
+				log.Info("Simulator: Reduced processing time", "nextValidator", nextValidator, "timeBlockReceived", env.timeBlockReceived, "minusToOffset", minusToOffset)
+			}
+			break
+		}
 	}
 
-	if nextValidator == common.HexToAddress("0x3f349bBaFEc1551819B8be1EfEA2fC46cA749aA1") {
-		sleepingTime := 300
-		log.Info("Simulator: Going to sleep", "nextValidator", nextValidator, "timeBlockReceived", env.timeBlockReceived, "sleepingTime", sleepingTime)
-		time.Sleep(time.Duration(sleepingTime * 1e6))
-		env.timeBlockReceived = time.Now()
-		log.Info("Simulator: Awake", "nextValidator", nextValidator, "timeBlockReceived", env.timeBlockReceived, "sleepingTime", sleepingTime)
-	}
 	pending, err := simulator.eth.TxPool().Pending()
 	if err != nil {
 		log.Error("Simulator: Failed to fetch pending transactions", "err", err)
@@ -1389,6 +1425,41 @@ func (simulator *Simulator) getCurrentValidators(blockHash common.Hash) ([]commo
 		valz[i] = a
 	}
 	return valz, nil
+}
+
+// getCurrentValidators get current validators
+func (simulator *Simulator) updateValidatorParams(validators []common.Address) {
+	if len(simulator.validatorParams) == 0 {
+		//initialize struct
+		for _, val := range validators {
+			log.Info("Simulator: creating new validator params", "address", val)
+			newVal := ValidatorParams{
+				address:       val,
+				offsetPercent: 0.0,
+			}
+			simulator.validatorParams = append(simulator.validatorParams, newVal)
+		}
+		return
+	}
+
+	for _, valAddress := range validators {
+		exist := false
+		for _, val := range simulator.validatorParams {
+			if val.address == valAddress {
+				exist = true
+				break
+			}
+		}
+		if !exist {
+			log.Info("Simulator: creating new validator params", "address", valAddress)
+			newVal := ValidatorParams{
+				address:       valAddress,
+				offsetPercent: 0.0,
+			}
+			simulator.validatorParams = append(simulator.validatorParams, newVal)
+		}
+
+	}
 }
 
 /*********************** Utils ***********************/
