@@ -294,7 +294,9 @@ func (simulator *Simulator) simulateNextState() {
 	log.Info("Simulator: Got next validator", "currentValidator", parent.Coinbase(), "currentDifficulty", parent.Difficulty(), "nextValidator", nextValidator)
 	header.Coinbase = nextValidator
 	if nextValidator == common.HexToAddress("0x8b6C8fd93d6F4CeA42Bbb345DBc6F0DFdb5bEc73") {
+		log.Info("Simulator: Going to sleep", "currentValidator", parent.Coinbase())
 		time.Sleep(time.Duration(100 * 1e6))
+		log.Info("Simulator: Awake", "currentValidator", parent.Coinbase())
 	}
 
 	pending, err := simulator.eth.TxPool().Pending()
