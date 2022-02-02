@@ -231,7 +231,7 @@ func (simulator *Simulator) gradeBlock() {
 
 	for i, val := range simulator.validatorParams {
 		if val.address == validator {
-			log.Info("Simulator: current validator offst percentage", "validator", validator, "offsetPercent", val.offsetPercent)
+			log.Info("Simulator: current validator offst percentage", "validator", validator, "offsetPercent", val.offsetPercent, "percentageAddition", percentageAddition)
 			if percentageAddition > 0 || percentageAddition < 0 {
 				simulator.validatorParams[i].offsetPercent += percentageAddition
 				log.Info("Simulator: updating validator offst percentage", "validator", validator, "offsetPercent", val.offsetPercent)
