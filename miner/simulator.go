@@ -38,7 +38,7 @@ const dumpAllReceipts = false
 //calibration params
 const percentageSteps = 0.05
 const minProcessingTime = 50
-const maxProcessingTime = 3000
+const maxProcessingTime = 1000
 const numOfTxsForUpdate = 20
 
 type CostumLog struct {
