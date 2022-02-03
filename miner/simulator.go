@@ -39,6 +39,7 @@ const dumpAllReceipts = false
 const percentageSteps = 0.05
 const minProcessingTime = 50
 const maxProcessingTime = 1000
+const maxPercentage = 2.5
 const numOfTxsForUpdate = 20
 
 type CostumLog struct {
@@ -234,6 +235,9 @@ func (simulator *Simulator) gradeBlock() {
 			log.Info("Simulator: current validator offst percentage", "validator", validator, "offsetPercent", simulator.validatorParams[i].offsetPercent, "percentageAddition", percentageAddition)
 			if percentageAddition > 0 || percentageAddition < 0 {
 				simulator.validatorParams[i].offsetPercent += percentageAddition
+				if simulator.validatorParams[i].offsetPercent > maxPercentage {
+					simulator.validatorParams[i].offsetPercent = maxPercentage
+				}
 				log.Info("Simulator: updating validator offst percentage", "validator", validator, "offsetPercent", simulator.validatorParams[i].offsetPercent)
 			}
 			break
