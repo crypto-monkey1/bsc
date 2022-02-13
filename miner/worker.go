@@ -62,7 +62,7 @@ const (
 
 	// minRecommitInterval is the minimal time interval to recreate the mining block with
 	// any newly arrived transactions.
-	minRecommitInterval = 0 * time.Millisecond
+	minRecommitInterval = 1 * time.Second
 
 	// maxRecommitInterval is the maximum time interval to recreate the mining block with
 	// any newly arrived transactions.
@@ -162,27 +162,9 @@ type worker struct {
 	remoteUncles map[common.Hash]*types.Block // A set of side blocks as the possible uncle blocks.
 	unconfirmed  *unconfirmedBlocks           // A set of locally mined blocks pending canonicalness confirmations.
 
-	mu                     sync.RWMutex // The lock used to protect the coinbase and extra fields
-	coinbase               common.Address
-	coinbaseByDemand       common.Address
-	coinbaseByDemandSet    bool
-	timestamp              uint64
-	blockNumberToSimBigInt *big.Int
-	extra                  []byte
-
-	index            int
-	timeOfLastCommit time.Time
-
-	isDummyWorker        bool
-	isCustomWork         bool
-	isBlockReady         bool
-	workingCurrently     bool
-	maxNumOfTxsToSim     int
-	minGasPriceToSim     *big.Int
-	earliestTimeToCommit time.Time
-	stoppingHash         common.Hash
-	txsArray             []types.Transaction
-	timeOfSim            time.Duration
+	mu       sync.RWMutex // The lock used to protect the coinbase and extra fields
+	coinbase common.Address
+	extra    []byte
 
 	pendingMu    sync.RWMutex
 	pendingTasks map[common.Hash]*task
@@ -212,7 +194,7 @@ type worker struct {
 	resubmitHook func(time.Duration, time.Duration) // Method to call upon updating resubmitting interval.
 }
 
-func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(*types.Block) bool, init bool, index int) *worker {
+func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(*types.Block) bool, init bool) *worker {
 	worker := &worker{
 		config:             config,
 		chainConfig:        chainConfig,
@@ -235,7 +217,6 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 		startCh:            make(chan struct{}, 1),
 		resubmitIntervalCh: make(chan time.Duration),
 		resubmitAdjustCh:   make(chan *intervalAdjust, resubmitAdjustChanSize),
-		index:              index,
 	}
 	// Subscribe NewTxsEvent for tx pool
 	worker.txsSub = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh)
@@ -262,84 +243,11 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 	return worker
 }
 
-func newWorkerCustom(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(*types.Block) bool, init bool, index int) *worker {
-	worker := &worker{
-		config:             config,
-		chainConfig:        chainConfig,
-		engine:             engine,
-		eth:                eth,
-		mux:                mux,
-		chain:              eth.BlockChain(),
-		isLocalBlock:       isLocalBlock,
-		localUncles:        make(map[common.Hash]*types.Block),
-		remoteUncles:       make(map[common.Hash]*types.Block),
-		unconfirmed:        newUnconfirmedBlocks(eth.BlockChain(), miningLogAtDepth),
-		pendingTasks:       make(map[common.Hash]*task),
-		txsCh:              make(chan core.NewTxsEvent, txChanSize),
-		chainHeadCh:        make(chan core.ChainHeadEvent, chainHeadChanSize),
-		chainSideCh:        make(chan core.ChainSideEvent, chainSideChanSize),
-		newWorkCh:          make(chan *newWorkReq),
-		taskCh:             make(chan *task),
-		resultCh:           make(chan *types.Block, resultQueueSize),
-		exitCh:             make(chan struct{}),
-		startCh:            make(chan struct{}, 1),
-		resubmitIntervalCh: make(chan time.Duration),
-		resubmitAdjustCh:   make(chan *intervalAdjust, resubmitAdjustChanSize),
-		index:              index,
-	}
-	// Subscribe NewTxsEvent for tx pool
-	// worker.txsSub = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh)
-	// Subscribe events for blockchain
-	// worker.chainHeadSub = eth.BlockChain().SubscribeChainHeadEvent(worker.chainHeadCh)
-	// worker.chainSideSub = eth.BlockChain().SubscribeChainSideEvent(worker.chainSideCh)
-
-	// Sanitize recommit interval if the user-specified one is too short.
-	// recommit := worker.config.Recommit
-	// if recommit < minRecommitInterval {
-	// 	log.Warn("Sanitizing miner recommit interval", "provided", recommit, "updated", minRecommitInterval)
-	// 	recommit = minRecommitInterval
-	// }
-
-	// go worker.mainLoop()
-	// go worker.newWorkLoop(recommit)
-	// go worker.resultLoop()
-	// go worker.taskLoop()
-
-	// Submit first work to initialize pending state.
-	// if init {
-	// 	worker.startCh <- struct{}{}
-	// }
-	return worker
-}
-
 // setEtherbase sets the etherbase used to initialize the block coinbase field.
 func (w *worker) setEtherbase(addr common.Address) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.coinbase = addr
-	w.coinbaseByDemandSet = false
-	log.Info("setting coinbase with SetEtherBase", "coinbase", w.coinbase, "demandSet", w.coinbaseByDemandSet)
-
-}
-
-// setEtherbase sets the etherbase used to initialize the block coinbase field.
-func (w *worker) setEtherbaseParams(addr common.Address, timestamp uint64) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.coinbaseByDemand = addr
-	w.timestamp = timestamp
-	w.coinbaseByDemandSet = true
-	// w.coinbase = common.HexToAddress("0x3679479c2402e921db00923E014CD439c606C596")
-	log.Info("setting coinbase by demand", "coinbase", w.coinbaseByDemand, "demandSet", w.coinbaseByDemandSet, "timestamp", timestamp)
-}
-
-func (w *worker) unsetEtherbaseParams() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.timestamp = 0
-	w.coinbaseByDemandSet = false
-	// w.coinbase = common.HexToAddress("0x3679479c2402e921db00923E014CD439c606C596")
-	log.Info("unsetting coinbase by demand", "coinbase", w.coinbaseByDemand, "demandSet", w.coinbaseByDemandSet)
 }
 
 // setExtra sets the content used to initialize the block extra field.
@@ -375,10 +283,6 @@ func (w *worker) pending() (*types.Block, *state.StateDB) {
 	return w.snapshotBlock, w.snapshotState.Copy()
 }
 
-func (w *worker) pendingReceipts() []*types.Receipt {
-	return w.current.receipts
-}
-
 // pendingBlock returns pending block.
 func (w *worker) pendingBlock() *types.Block {
 	// return a snapshot to avoid contention on currentMu mutex
@@ -389,56 +293,12 @@ func (w *worker) pendingBlock() *types.Block {
 
 // start sets the running status as 1 and triggers new work submitting.
 func (w *worker) start() {
-	w.isCustomWork = false
-	w.isDummyWorker = true
 	atomic.StoreInt32(&w.running, 1)
 	w.startCh <- struct{}{}
-
-	if w.current != nil && w.current.state != nil {
-		w.current.state.StopPrefetcher()
-	}
-	atomic.StoreInt32(&w.running, 0)
-	close(w.exitCh)
 }
 
 // stop sets the running status as 0.
 func (w *worker) stop() {
-	atomic.StoreInt32(&w.running, 0)
-}
-
-func (w *worker) startMulti(maxNumOfTxsToSim int, minGasPriceToSim *big.Int, txsArray []types.Transaction, etherbase common.Address, timestamp uint64, blockNumberToSimBigInt *big.Int, earliestTimeToCommit time.Time, stoppingHash common.Hash) {
-	w.isCustomWork = true
-	w.isDummyWorker = false
-	w.isBlockReady = false
-	w.workingCurrently = true
-	w.maxNumOfTxsToSim = maxNumOfTxsToSim
-	w.minGasPriceToSim = minGasPriceToSim
-	w.earliestTimeToCommit = earliestTimeToCommit
-	w.stoppingHash = stoppingHash
-	w.txsArray = txsArray
-	w.coinbase = etherbase
-	w.coinbaseByDemandSet = true
-	w.timestamp = timestamp
-	w.blockNumberToSimBigInt = blockNumberToSimBigInt
-
-	// log.Info("startMulti", "etherbase", etherbase, "w.coinbase", w.coinbase)
-
-	atomic.StoreInt32(&w.running, 1)
-
-	if w.current != nil && w.current.state != nil {
-		w.current.state.StopPrefetcher()
-	}
-
-	w.commitNewWork(nil, true, time.Now().Unix())
-
-	atomic.StoreInt32(&w.running, 0)
-	// atomic.StoreInt32(&w.running, 1)
-	// w.startCh <- struct{}{}
-}
-
-// stop sets the running status as 0.
-func (w *worker) stopMulti() {
-	w.isBlockReady = false
 	atomic.StoreInt32(&w.running, 0)
 }
 
@@ -450,11 +310,11 @@ func (w *worker) isRunning() bool {
 // close terminates all background threads maintained by the worker.
 // Note the worker does not support being closed multiple times.
 func (w *worker) close() {
-	// if w.current != nil && w.current.state != nil {
-	// 	w.current.state.StopPrefetcher()
-	// }
-	// atomic.StoreInt32(&w.running, 0)
-	// close(w.exitCh)
+	if w.current != nil && w.current.state != nil {
+		w.current.state.StopPrefetcher()
+	}
+	atomic.StoreInt32(&w.running, 0)
+	close(w.exitCh)
 }
 
 // recalcRecommit recalculates the resubmitting interval upon feedback.
@@ -486,7 +346,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 		minRecommit = recommit // minimal resubmit interval specified by user.
 		timestamp   int64      // timestamp for each round of mining.
 	)
-	// log.Info("recommit value", "recommit", recommit, "minRecommitInterval", minRecommitInterval)
+
 	timer := time.NewTimer(0)
 	defer timer.Stop()
 	<-timer.C // discard the initial tick
@@ -517,9 +377,6 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 	}
 
 	for {
-		// log.Info("before delay", "worker index", w.index, "time now", time.Now().Nanosecond())
-		// time.Sleep(time.Duration(w.delay) * time.Millisecond)
-		// log.Info("after delay", "worker index", w.index, "time now", time.Now().Nanosecond())
 		select {
 		case <-w.startCh:
 			clearPending(w.chain.CurrentBlock().NumberU64())
@@ -601,25 +458,11 @@ func (w *worker) mainLoop() {
 	defer w.chainSideSub.Unsubscribe()
 
 	for {
-		// if w.coinbaseByDemandSet {
-		// 	w.coinbase = w.coinbaseByDemand
-		// 	// log.Info("setting ether base in worker by demand", "coinbase", w.coinbase)
-		// } else {
-		// 	// log.Info("no demand for coinbase", "coinbase", w.coinbase)
-		// }
-
 		select {
 		case req := <-w.newWorkCh:
-			if w.coinbaseByDemandSet {
-				w.commitNewWork(req.interrupt, req.noempty, req.timestamp)
-			} else {
-				w.commitNewWork(req.interrupt, req.noempty, req.timestamp)
-			}
+			w.commitNewWork(req.interrupt, req.noempty, req.timestamp)
 
 		case ev := <-w.chainSideCh:
-			if w.isCustomWork {
-				continue
-			}
 			// Short circuit for duplicate side blocks
 			if _, ok := w.engine.(*parlia.Parlia); ok {
 				continue
@@ -647,9 +490,6 @@ func (w *worker) mainLoop() {
 			}
 
 		case ev := <-w.txsCh:
-			if w.isCustomWork {
-				continue
-			}
 			// Apply transactions to the pending state if we're not mining.
 			//
 			// Note all transactions received may not be continuous with transactions
@@ -833,7 +673,6 @@ func (w *worker) makeCurrent(parent *types.Block, header *types.Header) error {
 		uncles:    mapset.NewSet(),
 		header:    header,
 	}
-	log.Info("In commitNewWork", "env.header.Coinbase", env.header.Coinbase, "header.Coinbase", header.Coinbase)
 	// Keep track of transactions which return errors so they can be removed
 	env.tcount = 0
 
@@ -900,22 +739,12 @@ func (w *worker) updateSnapshot() {
 
 func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Address, receiptProcessors ...core.ReceiptProcessor) ([]*types.Log, error) {
 	snap := w.current.state.Snapshot()
-	var receipt *types.Receipt
-	var err error
-	if w.isCustomWork {
-		receipt, err = core.ApplyTransactionCostumHeader(w.chainConfig, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, *w.chain.GetVMConfig(), w.blockNumberToSimBigInt, w.timestamp, receiptProcessors...)
-		if err != nil {
-			w.current.state.RevertToSnapshot(snap)
-			return nil, err
-		}
-	} else {
-		receipt, err = core.ApplyTransaction(w.chainConfig, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, *w.chain.GetVMConfig(), receiptProcessors...)
-		if err != nil {
-			w.current.state.RevertToSnapshot(snap)
-			return nil, err
-		}
-	}
 
+	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, *w.chain.GetVMConfig(), receiptProcessors...)
+	if err != nil {
+		w.current.state.RevertToSnapshot(snap)
+		return nil, err
+	}
 	w.current.txs = append(w.current.txs, tx)
 	w.current.receipts = append(w.current.receipts, receipt)
 
@@ -923,7 +752,6 @@ func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Addres
 }
 
 func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coinbase common.Address, interrupt *int32) bool {
-	// startTime := time.Now()
 	// Short circuit if current is nil
 	if w.current == nil {
 		return true
@@ -935,24 +763,22 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 	}
 
 	var coalescedLogs []*types.Log
-	// var stopTimer *time.Timer
-	// delay := w.engine.Delay(w.chain, w.current.header)
-	// if delay != nil {
-	// 	stopTimer = time.NewTimer(*delay - w.config.DelayLeftOver)
-	// 	log.Debug("Time left for mining work", "left", (*delay - w.config.DelayLeftOver).String(), "leftover", w.config.DelayLeftOver)
-	// 	defer stopTimer.Stop()
-	// }
-	txCount := 0
-	stopCommit := false
-	// log.Info("Before commiting txs loop", "workerIdx", w.index)
-	// LOOP:
+	var stopTimer *time.Timer
+	delay := w.engine.Delay(w.chain, w.current.header)
+	if delay != nil {
+		stopTimer = time.NewTimer(*delay - w.config.DelayLeftOver)
+		log.Debug("Time left for mining work", "left", (*delay - w.config.DelayLeftOver).String(), "leftover", w.config.DelayLeftOver)
+		defer stopTimer.Stop()
+	}
 
+	// initilise bloom processors
 	processorCapacity := 100
 	if txs.CurrentSize() < processorCapacity {
 		processorCapacity = txs.CurrentSize()
 	}
 	bloomProcessors := core.NewAsyncReceiptBloomGenerator(processorCapacity)
 
+LOOP:
 	for {
 		// In the following three cases, we will interrupt the execution of the transaction.
 		// (1) new head block event arrival, the interrupt signal is 1
@@ -976,49 +802,27 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		}
 		// If we don't have enough gas for any further transactions then we're done
 		if w.current.gasPool.Gas() < params.TxGas {
-			log.Info("Not enough gas for further transactions", "have", w.current.gasPool, "want", params.TxGas)
+			log.Trace("Not enough gas for further transactions", "have", w.current.gasPool, "want", params.TxGas)
 			break
 		}
-		// if stopTimer != nil {
-		// 	select {
-		// 	case <-stopTimer.C:
-		// 		log.Info("Not enough time for further transactions", "txs", len(w.current.txs))
-		// 		break LOOP
-		// 	default:
-		// 	}
-		// }
+		if stopTimer != nil {
+			select {
+			case <-stopTimer.C:
+				log.Info("Not enough time for further transactions", "txs", len(w.current.txs))
+				break LOOP
+			default:
+			}
+		}
 		// Retrieve the next transaction and abort if all done
 		tx := txs.Peek()
 		if tx == nil {
 			break
 		}
-		if stopCommit {
-			break
-		}
-
-		if w.isCustomWork {
-			if w.maxNumOfTxsToSim > 0 {
-				if txCount > w.maxNumOfTxsToSim {
-					log.Info("Got to max number of txs in pending block", "workerIndex", w.index, "txCount", txCount, "w.maxNumOfTxsToSim", w.maxNumOfTxsToSim)
-					break
-				}
-			}
-			if w.minGasPriceToSim.Cmp(big.NewInt(0)) == 1 {
-				if tx.GasPrice().Cmp(w.minGasPriceToSim) == -1 {
-					log.Info("Got to minimum gas price for pending block", "workerIndex", w.index, "tx.GasPrice()", tx.GasPrice(), "w.minGasPriceToSim", w.minGasPriceToSim)
-					break
-				}
-			}
-			if w.stoppingHash == tx.Hash() {
-				log.Info("Got stopping hash tx", "workerIndex", w.index, "tx.Hash()", tx.Hash())
-				stopCommit = true
-			}
-		}
 		// Error may be ignored here. The error has already been checked
 		// during transaction acceptance is the transaction pool.
 		//
 		// We use the eip155 signer regardless of the current hf.
-		// from, _ := types.Sender(w.current.signer, tx)
+		//from, _ := types.Sender(w.current.signer, tx)
 		// Check whether the tx is replay protected. If we're not in the EIP155 hf
 		// phase, start ignoring the sender until we do.
 		if tx.Protected() && !w.chainConfig.IsEIP155(w.current.header.Number) {
@@ -1028,53 +832,45 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		}
 		// Start executing the transaction
 		w.current.state.Prepare(tx.Hash(), common.Hash{}, w.current.tcount)
-		// log.Info("Before commmiting tx", "workerIndex", w.index, "from", from, "tx.Hash()", tx.Hash())
+
 		logs, err := w.commitTransaction(tx, coinbase, bloomProcessors)
-		// if time.Since(startTime) > 1e9 {
-		// 	log.Info("Too much time has passed", "workerIndex", w.index, "time", time.Since(startTime), "from", from, "tx.Hash()", tx.Hash())
-		// 	return true
-		// }
-		// log.Info("After commmiting tx", "workerIndex", w.index, "from", from, "tx.Hash()", tx.Hash())
 		switch {
 		case errors.Is(err, core.ErrGasLimitReached):
 			// Pop the current out-of-gas transaction without shifting in the next from the account
-			// log.Info("Gas limit exceeded for current block")
+			//log.Trace("Gas limit exceeded for current block", "sender", from)
 			txs.Pop()
 
 		case errors.Is(err, core.ErrNonceTooLow):
 			// New head notification data race between the transaction pool and miner, shift
-			// log.Info("Skipping transaction with low nonce", "nonce", tx.Nonce())
+			//log.Trace("Skipping transaction with low nonce", "sender", from, "nonce", tx.Nonce())
 			txs.Shift()
 
 		case errors.Is(err, core.ErrNonceTooHigh):
 			// Reorg notification data race between the transaction pool and miner, skip account =
-			// log.Info("Skipping account with hight nonce", "nonce", tx.Nonce())
+			//log.Trace("Skipping account with hight nonce", "sender", from, "nonce", tx.Nonce())
 			txs.Pop()
 
 		case errors.Is(err, nil):
 			// Everything ok, collect the logs and shift in the next transaction from the same account
-			// log.Info("All good")
 			coalescedLogs = append(coalescedLogs, logs...)
 			w.current.tcount++
 			txs.Shift()
-			txCount++
 
 		case errors.Is(err, core.ErrTxTypeNotSupported):
 			// Pop the unsupported transaction without shifting in the next from the account
-			// log.Info("Skipping unsupported transaction type", "sender", from, "type", tx.Type())
+			//log.Trace("Skipping unsupported transaction type", "sender", from, "type", tx.Type())
 			txs.Pop()
 
 		default:
 			// Strange error, discard the transaction and get the next in line (note, the
 			// nonce-too-high clause will prevent us from executing in vain).
-			// log.Info("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
+			//log.Debug("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
 			txs.Shift()
 		}
 	}
-	// log.Info("after commiting txs loop", "workerIdx", w.index)
 	bloomProcessors.Close()
 
-	if (!w.isRunning() && len(coalescedLogs) > 0) || (w.isRunning() && w.isCustomWork) {
+	if !w.isRunning() && len(coalescedLogs) > 0 {
 		// We don't push the pendingLogsEvent while we are mining. The reason is that
 		// when we are mining, the worker will regenerate a mining block every 3 seconds.
 		// In order to avoid pushing the repeated pendingLog, we disable the pending log pushing.
@@ -1089,7 +885,6 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		}
 		w.pendingLogsFeed.Send(cpy)
 	}
-
 	// Notify resubmit loop to decrease resubmitting interval if current interval is larger
 	// than the user-specified one.
 	if interrupt != nil {
@@ -1105,6 +900,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 
 	tstart := time.Now()
 	parent := w.chain.CurrentBlock()
+
 	if parent.Time() >= uint64(timestamp) {
 		timestamp = int64(parent.Time() + 1)
 	}
@@ -1123,15 +919,11 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 			return
 		}
 		header.Coinbase = w.coinbase
-		log.Info("In commitNewWork1", "w.coinbase", w.coinbase, "header.Coinbase", header.Coinbase)
-		// log.Info("Switching coinbase")
-		// header.Coinbase = common.HexToAddress("0x3679479c2402e921db00923E014CD439c606C596")
 	}
 	if err := w.engine.Prepare(w.chain, header); err != nil {
 		log.Error("Failed to prepare header for mining", "err", err)
 		return
 	}
-	log.Info("In commitNewWork2", "w.coinbase", w.coinbase, "header.Coinbase", header.Coinbase)
 	// If we are care about TheDAO hard-fork check whether to override the extra-data or not
 	if daoBlock := w.chainConfig.DAOForkBlock; daoBlock != nil {
 		// Check whether the block is among the fork extra-override range
@@ -1145,14 +937,12 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 			}
 		}
 	}
-	log.Info("In commitNewWork3", "w.coinbase", w.coinbase, "header.Coinbase", header.Coinbase)
 	// Could potentially happen if starting to mine in an odd state.
 	err := w.makeCurrent(parent, header)
 	if err != nil {
 		log.Error("Failed to create mining context", "err", err)
 		return
 	}
-	log.Info("In commitNewWork", "w.current.header.Coinbase", w.current.header.Coinbase, "header.Coinbase", header.Coinbase)
 	// Create the current work task and check any fork transitions needed
 	env := w.current
 	if w.chainConfig.DAOForkSupport && w.chainConfig.DAOForkBlock != nil && w.chainConfig.DAOForkBlock.Cmp(header.Number) == 0 {
@@ -1173,10 +963,6 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		log.Error("Failed to fetch pending transactions", "err", err)
 	}
 	// Short circuit if there is no available pending transactions
-	if w.isDummyWorker {
-		return
-	}
-	log.Info("Got pending. before sorting txs", "workerIndex", w.index, "pending size", len(pending))
 	if len(pending) != 0 {
 		start := time.Now()
 		// Split the pending transactions into locals and remotes
@@ -1193,68 +979,16 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 				return
 			}
 		}
-		if w.isCustomWork {
-			if len(w.txsArray) > 0 {
-				for i, _ := range w.txsArray {
-					from, _ := types.Sender(w.current.signer, &w.txsArray[i])
-					if len(remoteTxs[from]) == 0 {
-
-						txsArray := make(types.Transactions, 0, 1)
-						txsArray = append(txsArray, &w.txsArray[i])
-						remoteTxs[from] = txsArray
-						log.Info("added a new tx from a new address", "remoteTxs[from]", remoteTxs[from])
-					} else {
-						txsArray := remoteTxs[from]
-						needToAdd := true
-						for j, tx := range txsArray {
-							if tx.Nonce() == w.txsArray[i].Nonce() {
-								needToAdd = false
-								log.Info("added tx has a tx with same nonce in pending already", "txs nonce", tx.Nonce())
-								if w.txsArray[i].GasPriceCmp(tx) == 1 {
-									log.Info("Added tx has higher gas price. switching.", "added tx gas price", w.txsArray[i].GasPrice(), "pending tx gas price", tx.GasPrice())
-									remoteTxs[from][j] = &w.txsArray[i]
-								} else {
-									log.Info("Added tx has lower gas price. switching.", "added tx gas price", w.txsArray[i].GasPrice(), "pending tx gas price", tx.GasPrice())
-								}
-							}
-						}
-						if needToAdd {
-							remoteTxs[from] = append(remoteTxs[from], &w.txsArray[i])
-							log.Info("added a new tx from a old address", "remoteTxs[from]", remoteTxs[from])
-						}
-
-					}
-				}
-			}
-		}
-
-		if len(remoteTxs) > 0 && !w.isCustomWork {
+		if len(remoteTxs) > 0 {
 			txs := types.NewTransactionsByPriceAndNonce(w.current.signer, remoteTxs)
 			if w.commitTransactions(txs, w.coinbase, interrupt) {
 				return
 			}
 		}
-		if len(remoteTxs) > 0 && w.isCustomWork {
-			// txs := types.NewTransactionsByPriceAndNonceWithTimeLimit(w.current.signer, remoteTxs, w.earliestTimeToCommit)
-			// log.Info("Sorting txs", "workerIndex", w.index, "remoteTxs size", len(remoteTxs))
-			txs := types.NewTransactionsByPriceAndNonce(w.current.signer, remoteTxs)
-			// log.Info("Before commiting txs", "workerIndex", w.index, "remoteTxs size", len(remoteTxs))
-			if w.commitTransactions(txs, w.coinbase, interrupt) {
-				return
-			}
-		}
-		// log.Info("Done commiting txs", "workerIndex", w.index)
 		commitTxsTimer.UpdateSince(start)
 		log.Info("Gas pool", "height", header.Number.String(), "pool", w.current.gasPool.String())
 	}
-	log.Info("Commiting block", "workerIndex", w.index)
-	if w.isCustomWork {
-		w.commitCustom(uncles, w.fullTaskHook, true, tstart)
-		w.isBlockReady = true
-	} else {
-		w.commit(uncles, w.fullTaskHook, false, tstart)
-	}
-
+	w.commit(uncles, w.fullTaskHook, false, tstart)
 }
 
 // commit runs any post-transaction state modifications, assembles the final block
@@ -1275,13 +1009,12 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 		}
 		select {
 		case w.taskCh <- &task{receipts: receipts, state: s, block: block, createdAt: time.Now()}:
-			w.timeOfLastCommit = time.Now()
 			w.unconfirmed.Shift(block.NumberU64() - 1)
-			log.Info("Commit new mining work", "number", block.Number(), "workerIdx", w.index, "sealhash", w.engine.SealHash(block.Header()),
+			log.Info("Commit new mining work", "number", block.Number(), "sealhash", w.engine.SealHash(block.Header()),
 				"uncles", len(uncles), "txs", w.current.tcount,
 				"gas", block.GasUsed(),
 				"elapsed", common.PrettyDuration(time.Since(start)))
-			w.timeOfSim = time.Since(start)
+
 		case <-w.exitCh:
 			log.Info("Worker has exited")
 		}
@@ -1290,37 +1023,6 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 		w.updateSnapshot()
 	}
 	return nil
-}
-
-func (w *worker) commitCustom(uncles []*types.Header, interval func(), update bool, start time.Time) error {
-	s := w.current.state
-	block, _, err := w.engine.FinalizeAndAssemble(w.chain, types.CopyHeader(w.current.header), s, w.current.txs, uncles, w.current.receipts)
-	if err != nil {
-		return err
-	}
-	log.Info("Checking Block last tx", "w.current.tcount", w.current.tcount, "blockTxs", len(block.Transactions()), "last tx gp", block.Transactions()[len(block.Transactions())-1].GasPrice(),
-		"last tx ", block.Transactions()[len(block.Transactions())-1].To())
-	log.Info("Checking Block before last tx", "w.current.tcount", w.current.tcount, "blockTxs", len(block.Transactions()), "last tx gp", block.Transactions()[len(block.Transactions())-2].GasPrice(),
-		"last tx ", block.Transactions()[len(block.Transactions())-2].To())
-	w.timeOfLastCommit = time.Now()
-	w.unconfirmed.Shift(block.NumberU64() - 1)
-	log.Info("Commit new mining work", "number", block.Number(), "workerIdx", w.index, "sealhash", w.engine.SealHash(block.Header()),
-		"uncles", len(uncles), "txs", w.current.tcount,
-		"gas", block.GasUsed(),
-		"elapsed", common.PrettyDuration(time.Since(start)))
-	w.timeOfSim = time.Since(start)
-	w.updateSnapshot()
-	return nil
-}
-
-// copyReceipts makes a deep copy of the given receipts.
-func copyReceipts(receipts []*types.Receipt) []*types.Receipt {
-	result := make([]*types.Receipt, len(receipts))
-	for i, l := range receipts {
-		cpy := *l
-		result[i] = &cpy
-	}
-	return result
 }
 
 // postSideBlock fires a side chain event, only use it for testing.

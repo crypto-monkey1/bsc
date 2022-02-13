@@ -136,67 +136,6 @@ func (api *PrivateMinerAPI) SetEtherbase(etherbase common.Address) bool {
 	return true
 }
 
-// SetEtherbase sets the etherbase of the miner
-func (api *PrivateMinerAPI) SetEtherbaseParams(etherbase common.Address, timestamp uint64) bool {
-	api.e.SetEtherbaseParams(etherbase, timestamp)
-	return true
-}
-
-func (api *PrivateMinerAPI) UnsetEtherbaseParams() bool {
-	api.e.UnsetEtherbaseParams()
-	return true
-}
-
-func (api *PrivateMinerAPI) GetPendingBlockMulti() (map[string]interface{}, error) {
-	block := api.e.GetPendingBlockMulti()
-	if block != nil {
-		response, err := ethapi.RPCMarshalBlock(block, true, true)
-		if err == nil {
-			// Pending blocks need to nil out a few fields
-			for _, field := range []string{"hash", "nonce", "miner"} {
-				response[field] = nil
-			}
-		}
-		return response, err
-	}
-	return nil, nil
-}
-
-func (api *PrivateMinerAPI) InitWorker() int {
-	return api.e.InitWorker()
-}
-
-func (api *PrivateMinerAPI) GetNumOfWorkers() int {
-	return api.e.GetNumOfWorkers()
-}
-
-func (api *PrivateMinerAPI) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPriceToSim string, addressesToReturnBalances []common.Address, inputTxs []hexutil.Bytes, timeOffset []int64, etherbase common.Address, timestamp uint64, blockNumber string, earliestTimeToCommit int64, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash, highestGasPriceAfterTimestampTime int64, highestGasPriceAfterTimestampIgnore common.Address) map[string]interface{} {
-	tstartAllTime := time.Now()
-	txsArray := make([]types.Transaction, len(inputTxs))
-	for i, input := range inputTxs {
-		if err := txsArray[i].UnmarshalBinary(input); err != nil {
-			log.Error("Couldnt unmarshal tx", "txIdx", i)
-			return nil
-		}
-		txsArray[i].SetTimeOffsetInMs(timeOffset[i])
-	}
-
-	minGasPriceToSimBigInt := new(big.Int)
-	minGasPriceToSimBigInt, ok := minGasPriceToSimBigInt.SetString(minGasPriceToSim, 10)
-	if !ok {
-		log.Error("wasnt able to convert string to big int in ExecuteWork")
-		return nil
-	}
-
-	blockNumberToSimBigInt := new(big.Int)
-	blockNumberToSimBigInt, ok2 := blockNumberToSimBigInt.SetString(blockNumber, 10)
-	if !ok2 {
-		log.Error("wasnt able to convert string to big int in ExecuteWork")
-		return nil
-	}
-	return api.e.ExecuteWork(workerIndex, maxNumOfTxsToSim, minGasPriceToSimBigInt, addressesToReturnBalances, txsArray, etherbase, timestamp, blockNumberToSimBigInt, time.Unix(0, earliestTimeToCommit*1e6), stoppingHash, stopReceiptHash, returnedDataHash, highestGasPriceAfterTimestampTime, highestGasPriceAfterTimestampIgnore, tstartAllTime)
-}
-
 func (api *PrivateMinerAPI) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, blockNumberToSimulate *big.Int, inputPriority hexutil.Bytes, inputTxs []hexutil.Bytes, stoppingHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash, outputHashX1 bool, tokenAddress common.Address, pairAddress common.Address) map[string]interface{} {
 	txsArray := make([]types.Transaction, len(inputTxs))
 	for i, input := range inputTxs {

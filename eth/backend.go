@@ -474,35 +474,6 @@ func (s *Ethereum) SetEtherbase(etherbase common.Address) {
 	s.miner.SetEtherbase(etherbase)
 }
 
-// SetEtherbase sets the mining reward address.
-func (s *Ethereum) SetEtherbaseParams(etherbase common.Address, timestamp uint64) {
-	s.lock.Lock()
-	s.etherbase = etherbase
-	s.lock.Unlock()
-
-	s.miner.SetEtherbaseParams(etherbase, timestamp)
-}
-
-func (s *Ethereum) UnsetEtherbaseParams() {
-	s.miner.UnsetEtherbaseParams()
-}
-
-func (s *Ethereum) GetPendingBlockMulti() *types.Block {
-	return s.miner.GetPendingBlockMulti()
-}
-
-func (s *Ethereum) InitWorker() int {
-	return s.miner.InitWorker()
-}
-
-func (s *Ethereum) GetNumOfWorkers() int {
-	return s.miner.GetNumOfWorkers()
-}
-
-func (s *Ethereum) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPriceToSim *big.Int, addressesToReturnBalances []common.Address, txsArray []types.Transaction, etherbase common.Address, timestamp uint64, blockNumberToSimBigInt *big.Int, earliestTimeToCommit time.Time, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash, highestGasPriceAfterTimestampTime int64, highestGasPriceAfterTimestampIgnore common.Address, tstartAllTime time.Time) map[string]interface{} {
-	return s.miner.ExecuteWork(workerIndex, maxNumOfTxsToSim, minGasPriceToSim, addressesToReturnBalances, txsArray, etherbase, timestamp, blockNumberToSimBigInt, earliestTimeToCommit, stoppingHash, stopReceiptHash, returnedDataHash, highestGasPriceAfterTimestampTime, highestGasPriceAfterTimestampIgnore, tstartAllTime)
-}
-
 func (s *Ethereum) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, blockNumberToSimulate *big.Int, priorityTx *types.Transaction, txsArray []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash, outputHashX1 bool, tokenAddress common.Address, pairAddress common.Address) map[string]interface{} {
 	simulatorResult := s.simulator.SimulateOnCurrentStatePriority(addressesToReturnBalances, addressesToDeleteFromPending, blockNumberToSimulate, priorityTx, txsArray, stoppingHash, returnedDataHash, victimHash, outputHashX1, tokenAddress, pairAddress)
 	s.simulator.SimualtingOnState = false

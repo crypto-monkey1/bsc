@@ -34,37 +34,6 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 )
 
-type MyLog struct {
-	Address common.Address `json:"address"`
-	// list of topics provided by the contract.
-	Topics []common.Hash `json:"topics"`
-	// supplied by the contract, usually ABI-encoded
-	Data hexutil.Bytes `json:"data"`
-	// index of the log in the block
-	Index uint `json:"logIndex"`
-}
-
-type TempTx struct {
-	Log         MyLog       `json:"log"`
-	TxHash      common.Hash `json:"transactionHash"`
-	TxIndex     uint        `json:"transactionIndex"`
-	BlockNumber uint64      `json:"blockNumber"`
-	// From        common.Address  `json:"from"`
-	// Gas         hexutil.Uint64  `json:"gas"`
-	// GasPrice    *hexutil.Big    `json:"gasPrice"`
-	// Input       hexutil.Bytes   `json:"input"`
-	// Nonce       hexutil.Uint64  `json:"nonce"`
-	// To          *common.Address `json:"to"`
-	// Value       *hexutil.Big    `json:"value"`
-}
-
-type MyTx struct {
-	Logs        []MyLog     `json:"logs"`
-	TxHash      common.Hash `json:"transactionHash"`
-	TxIndex     uint        `json:"transactionIndex"`
-	BlockNumber uint64      `json:"blockNumber"`
-}
-
 // Backend wraps all methods required for mining.
 type Backend interface {
 	BlockChain() *core.BlockChain
@@ -73,44 +42,42 @@ type Backend interface {
 
 // Config is the configuration parameters of mining.
 type Config struct {
-	Etherbase            common.Address `toml:",omitempty"` // Public address for block mining rewards (default = first account)
-	Notify               []string       `toml:",omitempty"` // HTTP URL list to be notified of new work packages (only useful in ethash).
-	NotifyFull           bool           `toml:",omitempty"` // Notify with pending block headers instead of work packages
-	ExtraData            hexutil.Bytes  `toml:",omitempty"` // Block extra data set by the miner
-	DelayLeftOver        time.Duration  // Time for broadcast block
-	GasFloor             uint64         // Target gas floor for mined blocks.
-	GasCeil              uint64         // Target gas ceiling for mined blocks.
-	GasPrice             *big.Int       // Minimum gas price for mining a transaction
-	Recommit             time.Duration  // The time interval for miner to re-create mining work.
-	Noverify             bool           // Disable remote mining solution verification(only useful in ethash).
-	NumOfParallelWorkers int
+	Etherbase     common.Address `toml:",omitempty"` // Public address for block mining rewards (default = first account)
+	Notify        []string       `toml:",omitempty"` // HTTP URL list to be notified of new work packages (only useful in ethash).
+	NotifyFull    bool           `toml:",omitempty"` // Notify with pending block headers instead of work packages
+	ExtraData     hexutil.Bytes  `toml:",omitempty"` // Block extra data set by the miner
+	DelayLeftOver time.Duration  // Time for broadcast block
+	GasFloor      uint64         // Target gas floor for mined blocks.
+	GasCeil       uint64         // Target gas ceiling for mined blocks.
+	GasPrice      *big.Int       // Minimum gas price for mining a transaction
+	Recommit      time.Duration  // The time interval for miner to re-create mining work.
+	Noverify      bool           // Disable remote mining solution verification(only useful in ethash).
 }
 
 // Miner creates blocks and searches for proof-of-work values.
 type Miner struct {
-	mux         *event.TypeMux
-	multiWorker *multiWorker
-	worker      *worker
-	coinbase    common.Address
-	eth         Backend
-	engine      consensus.Engine
-	exitCh      chan struct{}
-	startCh     chan common.Address
-	stopCh      chan struct{}
+	mux      *event.TypeMux
+	worker   *worker
+	coinbase common.Address
+	eth      Backend
+	engine   consensus.Engine
+	exitCh   chan struct{}
+	startCh  chan common.Address
+	stopCh   chan struct{}
 }
 
 func New(eth Backend, config *Config, chainConfig *params.ChainConfig, mux *event.TypeMux, engine consensus.Engine, isLocalBlock func(block *types.Block) bool) *Miner {
 	miner := &Miner{
-		eth:         eth,
-		mux:         mux,
-		engine:      engine,
-		exitCh:      make(chan struct{}),
-		startCh:     make(chan common.Address),
-		stopCh:      make(chan struct{}),
-		worker:      newWorker(config, chainConfig, engine, eth, mux, isLocalBlock, false, -1),
-		multiWorker: newMultiWorker(config, chainConfig, engine, eth, mux, isLocalBlock, false),
+		eth:     eth,
+		mux:     mux,
+		engine:  engine,
+		exitCh:  make(chan struct{}),
+		startCh: make(chan common.Address),
+		stopCh:  make(chan struct{}),
+		worker:  newWorker(config, chainConfig, engine, eth, mux, isLocalBlock, false),
 	}
 	go miner.update()
+
 	return miner
 }
 
@@ -163,16 +130,12 @@ func (miner *Miner) update() {
 				events.Unsubscribe()
 			}
 		case addr := <-miner.startCh:
-			// log.Info("Passing on starting mine")
-			// continue
 			miner.SetEtherbase(addr)
 			if canStart {
 				miner.worker.start()
 			}
 			shouldStart = true
 		case <-miner.stopCh:
-			// log.Info("Passing on stopping mine")
-			// continue
 			shouldStart = false
 			miner.worker.stop()
 		case <-miner.exitCh:
@@ -257,199 +220,6 @@ func (miner *Miner) PendingBlock() *types.Block {
 func (miner *Miner) SetEtherbase(addr common.Address) {
 	miner.coinbase = addr
 	miner.worker.setEtherbase(addr)
-}
-
-func (miner *Miner) SetEtherbaseParams(addr common.Address, timestamp uint64) {
-	miner.coinbase = addr
-	miner.multiWorker.setEtherbaseParams(addr, timestamp)
-}
-
-func (miner *Miner) UnsetEtherbaseParams() {
-	miner.multiWorker.unsetEtherbaseParams()
-}
-
-func (miner *Miner) GetPendingBlockMulti() *types.Block {
-	if miner.worker.isRunning() {
-		// log.Info("Retreiving multi pending block")
-		// return miner.worker.workers[workerIndex].pendingBlock()
-		return miner.worker.pendingBlock()
-	} else {
-		// fallback to latest block
-		return miner.worker.chain.CurrentBlock()
-	}
-}
-
-func (miner *Miner) GetNumOfWorkers() int {
-	numOfWorkers := len(miner.multiWorker.workers)
-	log.Info("Current number of workers", "numOfWorkers", numOfWorkers)
-	return numOfWorkers
-}
-
-func (miner *Miner) InitWorker() int {
-	//Add worker to multi worker and dont start it
-	return miner.multiWorker.addWorker()
-}
-
-func (miner *Miner) ExecuteWork(workerIndex int, maxNumOfTxsToSim int, minGasPriceToSim *big.Int, addressesToReturnBalances []common.Address, txsArray []types.Transaction, etherbase common.Address, timestamp uint64, blockNumberToSimBigInt *big.Int, earliestTimeToCommit time.Time, stoppingHash common.Hash, stopReceiptHash common.Hash, returnedDataHash common.Hash, highestGasPriceAfterTimestampTime int64, highestGasPriceAfterTimestampIgnore common.Address, tstartAllTime time.Time) map[string]interface{} {
-
-	if miner.multiWorker.isWorking(workerIndex) {
-		workerIndex = miner.multiWorker.findFreeWorker()
-	}
-
-	log.Info("Worker sim params", "workerIndex", workerIndex, "etherbase", etherbase, "blockNumber", blockNumberToSimBigInt, "timestmap", timestamp, "maxNumOfTxsToSim", maxNumOfTxsToSim, "minGasPriceToSim", minGasPriceToSim, "numOfTxsToSim", len(txsArray), "earliestTimeToCommit", earliestTimeToCommit, "stoppingHash", stoppingHash, "highestGasPriceAfterTimestamp", highestGasPriceAfterTimestampTime, "highestGasPriceAfterTimestampIgnore", highestGasPriceAfterTimestampIgnore)
-	//Start worker
-	miner.multiWorker.start(workerIndex, maxNumOfTxsToSim, minGasPriceToSim, txsArray, etherbase, timestamp, blockNumberToSimBigInt, earliestTimeToCommit, stoppingHash)
-
-	//Wait until block is ready
-	// for {
-	// 	if miner.multiWorker.isDone(workerIndex) {
-	// 		log.Info("Worker work is done", "workerIndex", workerIndex)
-	// 		break
-	// 	} else {
-	// 		time.Sleep(10 * time.Millisecond)
-	// 	}
-	// }
-	//stop worker
-	// miner.multiWorker.stop(workerIndex)
-
-	if !miner.multiWorker.isDone(workerIndex) {
-		return nil
-	}
-	log.Info("Worker work is done", "workerIndex", workerIndex)
-	miner.multiWorker.finishedWork(workerIndex)
-	timeOfSim := miner.multiWorker.getTimeOfSim(workerIndex)
-
-	tstartDataCollection := time.Now()
-	//get receipts
-	nextBlockReceipts := miner.multiWorker.pendingReceipts(workerIndex)
-	returnedReceipts := []types.Receipt{}
-	txArrayReceipts := []types.Receipt{}
-
-	highestGasPriceAfterTimestamp := big.NewInt(0)
-	var highestGasPriceAfterTimestampHash common.Hash
-	var highestGasPriceAfterTimestampTo common.Address
-	keepAdding := true
-	returnedData := "0"
-	for _, receipt := range nextBlockReceipts {
-
-		if receipt.Timestamp > highestGasPriceAfterTimestampTime {
-			oneOfMine := false
-			for _, tx := range txsArray {
-				if receipt.TxHash == tx.Hash() {
-					oneOfMine = true
-				}
-			}
-			if receipt.To != nil {
-				if *receipt.To == highestGasPriceAfterTimestampIgnore {
-					oneOfMine = true
-				}
-			}
-			if !oneOfMine {
-				if highestGasPriceAfterTimestamp.Cmp(receipt.GasPrice) == -1 {
-					highestGasPriceAfterTimestamp = receipt.GasPrice
-					highestGasPriceAfterTimestampHash = receipt.TxHash
-					highestGasPriceAfterTimestampTo = *receipt.To
-				}
-			}
-		}
-
-		if keepAdding {
-			returnedReceipts = append(returnedReceipts, *receipt)
-		}
-
-		if receipt.TxHash == stopReceiptHash {
-			keepAdding = false
-		}
-
-		if receipt.TxHash == returnedDataHash {
-			returnedData = receipt.ReturnedData
-		}
-
-		for _, tx := range txsArray {
-			if receipt.TxHash == tx.Hash() {
-				txArrayReceipts = append(txArrayReceipts, *receipt)
-			}
-		}
-
-	}
-	_, state := miner.multiWorker.pending(workerIndex)
-	log.Info("Got pending block", "workerIndex", workerIndex, "returned receipts len", len(returnedReceipts), "tx array receipts", len(txArrayReceipts))
-	//get data
-
-	// nextBlockTxs, err := ethapi.RPCMarshalBlock(block, true, true)
-	// if err == nil {
-	// 	// Pending blocks need to nil out a few fields
-	// 	for _, field := range []string{"hash", "nonce", "miner"} {
-	// 		nextBlockTxs[field] = nil
-	// 	}
-	// }
-
-	// nextBlockLogs := state.Logs()
-	// nextBlockLogsSorted := make([]TempTx, len(nextBlockLogs))
-	// for i, log := range nextBlockLogs {
-
-	// 	nextBlockLogsSorted[i] = TempTx{
-	// 		Log: MyLog{
-	// 			Address: log.Address,
-	// 			Topics:  log.Topics,
-	// 			Data:    hexutil.Bytes(log.Data),
-	// 			Index:   log.Index,
-	// 		},
-	// 		TxHash:      log.TxHash,
-	// 		TxIndex:     log.TxIndex,
-	// 		BlockNumber: log.BlockNumber,
-	// 	}
-	// }
-	// sort.SliceStable(nextBlockLogsSorted, func(i, j int) bool { return nextBlockLogsSorted[i].TxIndex < nextBlockLogsSorted[j].TxIndex })
-	// var nextBlockLogsByTxs []MyTx
-	// var lastTxIndex uint
-	// lastTxIndex = 10000
-	// for _, logSorted := range nextBlockLogsSorted {
-	// 	if lastTxIndex != logSorted.TxIndex {
-	// 		lastTxIndex = logSorted.TxIndex
-
-	// 		newMyTx := MyTx{
-	// 			TxHash:      logSorted.TxHash,
-	// 			TxIndex:     logSorted.TxIndex,
-	// 			BlockNumber: logSorted.BlockNumber,
-	// 			Logs:        []MyLog{},
-	// 		}
-	// 		nextBlockLogsByTxs = append(nextBlockLogsByTxs, newMyTx)
-	// 	}
-
-	// 	nextBlockLogsByTxs[len(nextBlockLogsByTxs)-1].Logs = append(nextBlockLogsByTxs[len(nextBlockLogsByTxs)-1].Logs, logSorted.Log)
-	// }
-
-	balances := make([]*big.Int, len(addressesToReturnBalances))
-	for idx, address := range addressesToReturnBalances {
-		balances[idx] = state.GetBalance(address)
-	}
-
-	/*return txs, account balances, logs*/
-	// fields := map[string]interface{}{
-	// 	"nextBlockTxs":       nextBlockTxs,
-	// 	"nextBlockLogs":      nextBlockLogsByTxs,
-	// 	"nextBlockReceipts":  nextBlockReceipts,
-	// 	"balances":           balances,
-	// 	"timeOfSim":          timeOfSim,
-	// 	"timeCollectingData": time.Since(tstartDataCollection),
-	// 	"allTime":            time.Since(tstartAllTime),
-	// }
-	fields := map[string]interface{}{
-		// "nextBlockTxs":  nextBlockTxs,
-		// "nextBlockLogs": nextBlockLogsByTxs,
-		"highestGasPriceAfterTimestamp":     highestGasPriceAfterTimestamp,
-		"highestGasPriceAfterTimestampHash": highestGasPriceAfterTimestampHash,
-		"highestGasPriceAfterTimestampTo":   highestGasPriceAfterTimestampTo,
-		"nextBlockReceipts":                 returnedReceipts,
-		"txArrayReceipts":                   txArrayReceipts,
-		"balances":                          balances,
-		"returnedData":                      returnedData,
-		"timeOfSim":                         timeOfSim,
-		"timeCollectingData":                time.Since(tstartDataCollection),
-		"allTime":                           time.Since(tstartAllTime),
-	}
-	return fields
 }
 
 // EnablePreseal turns on the preseal mining feature. It's enabled by default.

@@ -513,11 +513,6 @@ var (
 		Name:  "miner.noverify",
 		Usage: "Disable remote sealing verification",
 	}
-	MinerNumOfParallelWorkers = cli.IntFlag{
-		Name:  "miner.numofparallelworkers",
-		Usage: "number of parallel workers to produce next pending block",
-		Value: ethconfig.Defaults.Miner.NumOfParallelWorkers,
-	}
 	// Account settings
 	UnlockedAccountFlag = cli.StringFlag{
 
@@ -1493,7 +1488,6 @@ func setMiner(ctx *cli.Context, cfg *miner.Config) {
 	if ctx.GlobalIsSet(MinerNoVerfiyFlag.Name) {
 		cfg.Noverify = ctx.GlobalBool(MinerNoVerfiyFlag.Name)
 	}
-	cfg.NumOfParallelWorkers = ctx.GlobalInt(MinerNumOfParallelWorkers.Name)
 }
 
 func setWhitelist(ctx *cli.Context, cfg *ethconfig.Config) {

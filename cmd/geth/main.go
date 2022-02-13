@@ -139,7 +139,6 @@ var (
 		utils.MinerRecommitIntervalFlag,
 		utils.MinerDelayLeftoverFlag,
 		utils.MinerNoVerfiyFlag,
-		utils.MinerNumOfParallelWorkers,
 		utils.NATFlag,
 		utils.NoDiscoverFlag,
 		utils.DiscoveryV5Flag,
