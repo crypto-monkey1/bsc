@@ -293,7 +293,7 @@ func (simulator *Simulator) simulateNextState() {
 	nextValidator := simulator.validators[(parent.NumberU64()+1)%uint64(len(simulator.validators))]
 	log.Info("Simulator: Got next validator", "currentValidator", parent.Coinbase(), "currentDifficulty", parent.Difficulty(), "nextValidator", nextValidator)
 	header.Coinbase = nextValidator
-
+	log.Info("Simulator: next state header", "number", header.Number, "coinbase", header.Coinbase, "difficulty", header.Difficulty, "gasLimit", header.GasLimit, "timestamp", header.Time)
 	pending, err := simulator.eth.TxPool().Pending()
 	if err != nil {
 		log.Error("Simulator: Failed to fetch pending transactions", "err", err)
@@ -386,6 +386,7 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 	nextValidator := simulator.validators[(parent.NumberU64()+1)%uint64(len(simulator.validators))]
 	log.Info("Simulator: Got next validator", "currentValidator", parent.Coinbase(), "currentDifficulty", parent.Difficulty(), "nextValidator", nextValidator)
 	header.Coinbase = nextValidator
+	log.Info("Simulator: next state header", "number", header.Number, "coinbase", header.Coinbase, "difficulty", header.Difficulty, "gasLimit", header.GasLimit, "timestamp", header.Time)
 	env := &simEnvironment{
 		signer:    types.MakeSigner(simulator.chainConfig, header.Number),
 		state:     state,
@@ -581,6 +582,8 @@ func (simulator *Simulator) SimulateOnCurrentStateSingleTx(blockNumberToSimulate
 	nextValidator := simulator.validators[(parent.NumberU64()+1)%uint64(len(simulator.validators))]
 	log.Info("Simulator: Got next validator", "currentValidator", parent.Coinbase(), "currentDifficulty", parent.Difficulty(), "nextValidator", nextValidator)
 	header.Coinbase = nextValidator
+	log.Info("Simulator: next state header", "number", header.Number, "coinbase", header.Coinbase, "difficulty", header.Difficulty, "gasLimit", header.GasLimit, "timestamp", header.Time)
+
 	env := &simEnvironment{
 		signer:    types.MakeSigner(simulator.chainConfig, header.Number),
 		state:     state,
@@ -678,6 +681,7 @@ func (simulator *Simulator) SimulateOnCurrentStateBundle(addressesToReturnBalanc
 	nextValidator := simulator.validators[(parent.NumberU64()+1)%uint64(len(simulator.validators))]
 	log.Info("Simulator: Got next validator", "currentValidator", parent.Coinbase(), "currentDifficulty", parent.Difficulty(), "nextValidator", nextValidator)
 	header.Coinbase = nextValidator
+	log.Info("Simulator: next state header", "number", header.Number, "coinbase", header.Coinbase, "difficulty", header.Difficulty, "gasLimit", header.GasLimit, "timestamp", header.Time)
 	env := &simEnvironment{
 		signer:    types.MakeSigner(simulator.chainConfig, header.Number),
 		state:     state,
@@ -774,7 +778,7 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 	x2Validator := simulator.validators[(currentBlock.NumberU64()+1)%uint64(len(simulator.validators))]
 	log.Info("Simulator: Got next validator", "currentValidator", currentBlock.Coinbase(), "currentDifficulty", currentBlock.Difficulty(), "x2Validator", x2Validator)
 	x2Header.Coinbase = x2Validator
-
+	log.Info("Simulator: x2 header", "number", x2Header.Number, "coinbase", x2Header.Coinbase, "difficulty", x2Header.Difficulty, "gasLimit", x2Header.GasLimit, "timestamp", x2Header.Time)
 	x2Pending, err := simulator.eth.TxPool().Pending()
 	if err != nil {
 		log.Error("Simulator: Failed to fetch pending transactions", "err", err)
@@ -884,6 +888,7 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 	x3Validator := simulator.validators[(x2Env.block.NumberU64()+1)%uint64(len(simulator.validators))]
 	log.Info("Simulator: Got next validator", "x2Validator", x2Env.block.Coinbase(), "currentDifficulty", x2Env.block.Difficulty(), "x3Validator", x3Validator)
 	x3Header.Coinbase = x3Validator
+	log.Info("Simulator: x3 header", "number", x3Header.Number, "coinbase", x3Header.Coinbase, "difficulty", x3Header.Difficulty, "gasLimit", x3Header.GasLimit, "timestamp", x3Header.Time)
 	x3Env := &simEnvironment{
 		signer:    types.MakeSigner(simulator.chainConfig, x3Header.Number),
 		state:     x3State,
