@@ -23,6 +23,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
 )
@@ -189,20 +190,27 @@ func CalcGasLimit(parent *types.Block, gasFloor, gasCeil uint64) uint64 {
 		from parentGasLimit * (2/3) parentGasUsed is.
 	*/
 	limit := parent.GasLimit() - decay + contrib
+	log.Info("In CalcGasLimit before ifelse", "gasFloor", gasFloor, "gasCeil", gasCeil, "parent.GasUsed()", parent.GasUsed(), "params.GasLimitBoundDivisor", params.GasLimitBoundDivisor, "parent.GasLimit()", parent.GasLimit(), "decay", decay, "contrib", contrib, "limit", limit, "params.MinGasLimit", params.MinGasLimit)
 	if limit < params.MinGasLimit {
+		log.Info("limit is lower than min gas limit", "limit", limit, "params.MinGasLimit", params.MinGasLimit)
 		limit = params.MinGasLimit
 	}
 	// If we're outside our allowed gas range, we try to hone towards them
 	if limit < gasFloor {
+		log.Info("limit is lower than gas floor", "limit", limit, "gasFloor", gasFloor, "parent.GasLimit()", parent.GasLimit(), "decay", decay)
 		limit = parent.GasLimit() + decay
 		if limit > gasFloor {
+			log.Info("limit is higher than gas floor", "limit", limit, "gasFloor", gasFloor)
 			limit = gasFloor
 		}
 	} else if limit > gasCeil {
+		log.Info("limit is higher than gas ceil", "limit", limit, "gasCeil", gasCeil, "parent.GasLimit()", parent.GasLimit(), "decay", decay)
 		limit = parent.GasLimit() - decay
 		if limit < gasCeil {
+			log.Info("limit is lower than gas ceil", "limit", limit, "gasCeil", gasCeil)
 			limit = gasCeil
 		}
 	}
+	log.Info("In CalcGasLimit after ifelse", "limit", limit)
 	return limit
 }
