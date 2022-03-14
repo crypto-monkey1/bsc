@@ -3,6 +3,7 @@ package miner
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"math"
 	"math/big"
@@ -22,6 +23,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/systemcontracts"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
@@ -623,8 +625,16 @@ func (simulator *Simulator) SimulateOnCurrentStateSingleTx(blockNumberToSimulate
 	return simulatorResult
 }
 
+// TraceConfig holds extra parameters to trace functions.
+type TraceConfig struct {
+	*vm.LogConfig
+	Tracer  *string
+	Timeout *string
+	Reexec  *uint64
+}
+
 /*********************** Simulating on current state single tx***********************/
-func (simulator *Simulator) SimulateOnCurrentStateBundle(addressesToReturnBalances []common.Address, blockNumberToSimulate *big.Int, txs []types.Transaction) map[string]interface{} {
+func (simulator *Simulator) SimulateOnCurrentStateBundle(addressesToReturnBalances []common.Address, blockNumberToSimulate *big.Int, txs []types.Transaction, tracer *string) map[string]interface{} {
 	simulator.SimualtingOnState = true
 	log.Info("Simulator: New SimulateOnCurrentStateBundle call. checking if simulator is free...", "simualtingNextState", simulator.simualtingNextState)
 	var parent *types.Block
@@ -699,18 +709,51 @@ func (simulator *Simulator) SimulateOnCurrentStateBundle(addressesToReturnBalanc
 	processorCapacity := 1
 	bloomProcessors := core.NewAsyncReceiptBloomGenerator(processorCapacity)
 	returnedReceipts := []CostumReceipt{}
+	traceResults := []json.RawMessage{}
 	for _, tx := range txs {
-		env.state.Prepare(tx.Hash(), common.Hash{}, env.tcount)
-		receipt, err := core.ApplyTransactionForSimulator(simulator.chainConfig, simulator.chain, &env.header.Coinbase, env.gasPool, env.state, env.header, simulator.currentEnv.header, &tx, &env.header.GasUsed, *simulator.chain.GetVMConfig(), bloomProcessors)
-		if err != nil {
-			log.Error("Simulator: Failed Apply tx", "err", err, "txHash", tx.Hash())
-			return nil
+		//prepare tracer
+		if tracer != nil {
+			log.Info("Simulating tx with trace")
+			costumVmConfig := *simulator.chain.GetVMConfig()
+			costumVmConfig.Debug = true
+			txctx := tracers.Context{}
+			t, err := tracers.New(*tracer, &txctx)
+			if err != nil {
+				return nil
+			}
+			costumVmConfig.Tracer = t
+			env.state.Prepare(tx.Hash(), common.Hash{}, env.tcount)
+			receipt, err := core.ApplyTransactionForSimulator(simulator.chainConfig, simulator.chain, &env.header.Coinbase, env.gasPool, env.state, env.header, simulator.currentEnv.header, &tx, &env.header.GasUsed, costumVmConfig, bloomProcessors)
+			if err != nil {
+				log.Error("Simulator: Failed Apply tx", "err", err, "txHash", tx.Hash())
+				return nil
+			}
+			traceRes, err := t.GetResult()
+			if err != nil {
+				return nil
+			}
+			traceResults = append(traceResults, traceRes)
+
+			from, _ := types.Sender(env.signer, &tx)
+			costumReceipt := adjustReceipt(receipt, from)
+			log.Info("Simulator: Applied bundle tx", "txHash", tx.Hash())
+			returnedReceipts = append(returnedReceipts, costumReceipt)
+			env.tcount++
+		} else {
+			log.Info("Simulating tx without trace")
+			env.state.Prepare(tx.Hash(), common.Hash{}, env.tcount)
+			receipt, err := core.ApplyTransactionForSimulator(simulator.chainConfig, simulator.chain, &env.header.Coinbase, env.gasPool, env.state, env.header, simulator.currentEnv.header, &tx, &env.header.GasUsed, *simulator.chain.GetVMConfig(), bloomProcessors)
+			if err != nil {
+				log.Error("Simulator: Failed Apply tx", "err", err, "txHash", tx.Hash())
+				return nil
+			}
+
+			from, _ := types.Sender(env.signer, &tx)
+			costumReceipt := adjustReceipt(receipt, from)
+			log.Info("Simulator: Applied bundle tx", "txHash", tx.Hash())
+			returnedReceipts = append(returnedReceipts, costumReceipt)
+			env.tcount++
 		}
-		from, _ := types.Sender(env.signer, &tx)
-		costumReceipt := adjustReceipt(receipt, from)
-		log.Info("Simulator: Applied bundle tx", "txHash", tx.Hash())
-		returnedReceipts = append(returnedReceipts, costumReceipt)
-		env.tcount++
 	}
 
 	bloomProcessors.Close()
@@ -729,6 +772,7 @@ func (simulator *Simulator) SimulateOnCurrentStateBundle(addressesToReturnBalanc
 		"balances":             balances,
 		"currentStateNotReady": false,
 		"wrongBlock":           false,
+		"traceResults":         traceResults,
 	}
 
 	return simulatorResult

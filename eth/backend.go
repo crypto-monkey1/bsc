@@ -486,8 +486,8 @@ func (s *Ethereum) SimulateOnCurrentStateSingleTx(blockNumberToSimulate *big.Int
 	return simulatorResult
 }
 
-func (s *Ethereum) SimulateOnCurrentStateBundle(addressesToReturnBalances []common.Address, blockNumberToSimulate *big.Int, txs []types.Transaction) map[string]interface{} {
-	simulatorResult := s.simulator.SimulateOnCurrentStateBundle(addressesToReturnBalances, blockNumberToSimulate, txs)
+func (s *Ethereum) SimulateOnCurrentStateBundle(addressesToReturnBalances []common.Address, blockNumberToSimulate *big.Int, txs []types.Transaction, tracer *string) map[string]interface{} {
+	simulatorResult := s.simulator.SimulateOnCurrentStateBundle(addressesToReturnBalances, blockNumberToSimulate, txs, tracer)
 	s.simulator.SimualtingOnState = false
 	return simulatorResult
 }

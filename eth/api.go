@@ -161,7 +161,7 @@ func (api *PrivateMinerAPI) SimulateOnCurrentStateSingleTx(blockNumberToSimulate
 	return api.e.SimulateOnCurrentStateSingleTx(blockNumberToSimulate, tx)
 }
 
-func (api *PrivateMinerAPI) SimulateOnCurrentStateBundle(addressesToReturnBalances []common.Address, blockNumberToSimulate *big.Int, inputTxs []hexutil.Bytes) map[string]interface{} {
+func (api *PrivateMinerAPI) SimulateOnCurrentStateBundle(addressesToReturnBalances []common.Address, blockNumberToSimulate *big.Int, inputTxs []hexutil.Bytes, tracer string) map[string]interface{} {
 	txs := make([]types.Transaction, len(inputTxs))
 	for i, input := range inputTxs {
 		if err := txs[i].UnmarshalBinary(input); err != nil {
@@ -169,7 +169,11 @@ func (api *PrivateMinerAPI) SimulateOnCurrentStateBundle(addressesToReturnBalanc
 			return nil
 		}
 	}
-	return api.e.SimulateOnCurrentStateBundle(addressesToReturnBalances, blockNumberToSimulate, txs)
+	if len(tracer) > 0 {
+		return api.e.SimulateOnCurrentStateBundle(addressesToReturnBalances, blockNumberToSimulate, txs, &tracer)
+	} else {
+		return api.e.SimulateOnCurrentStateBundle(addressesToReturnBalances, blockNumberToSimulate, txs, nil)
+	}
 }
 
 func (api *PrivateMinerAPI) SimulateNextTwoStates(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, x1BlockNumber *big.Int, inputPriorityX2 hexutil.Bytes, x2InputTxs []hexutil.Bytes, x3InputTxs []hexutil.Bytes, stoppingHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash, tokenAddress common.Address, pairAddress common.Address) map[string]interface{} {

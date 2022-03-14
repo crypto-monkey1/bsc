@@ -846,6 +846,8 @@ func (api *API) TraceTransaction(ctx context.Context, hash common.Hash, config *
 // You can provide -2 as a block number to trace on top of the pending block.
 func (api *API) TraceCall(ctx context.Context, args ethapi.CallArgs, blockNrOrHash rpc.BlockNumberOrHash, config *TraceCallConfig) (interface{}, error) {
 	// Try to retrieve the specified block
+	log.Info("Inside TraceCall", "config", config, "args", args)
+	log.Info("Checking tracer", "config.Tracer", config.Tracer, "*config.Tracer", *config.Tracer)
 	var (
 		err   error
 		block *types.Block
@@ -903,8 +905,10 @@ func (api *API) traceTx(ctx context.Context, message core.Message, txctx *Contex
 	)
 	switch {
 	case config == nil:
+		log.Info("Checking where trace0")
 		tracer = vm.NewStructLogger(nil)
 	case config.Tracer != nil:
+		log.Info("Checking where trace1")
 		// Define a meaningful timeout of a single transaction trace
 		timeout := defaultTraceTimeout
 		if config.Timeout != nil {
@@ -912,6 +916,7 @@ func (api *API) traceTx(ctx context.Context, message core.Message, txctx *Contex
 				return nil, err
 			}
 		}
+
 		if t, err := New(*config.Tracer, txctx); err != nil {
 			return nil, err
 		} else {
@@ -926,8 +931,10 @@ func (api *API) traceTx(ctx context.Context, message core.Message, txctx *Contex
 			tracer = t
 		}
 	default:
+		log.Info("Checking where trace2")
 		tracer = vm.NewStructLogger(config.LogConfig)
 	}
+	log.Info("after tracer check", "tracer", tracer, "ctx", ctx)
 	// Run the transaction with tracing enabled.
 	vmenv := vm.NewEVM(vmctx, txContext, statedb, api.backend.ChainConfig(), vm.Config{Debug: true, Tracer: tracer})
 
