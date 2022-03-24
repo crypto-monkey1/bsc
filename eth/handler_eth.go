@@ -90,6 +90,7 @@ func (h *ethHandler) Handle(peer *eth.Peer, packet eth.Packet) error {
 		return h.handleBlockAnnounces(peer, hashes, numbers)
 
 	case *eth.NewBlockPacket:
+		log.Debug("Recieved new block packet in handler_eth", "peer", peer.ID(), "number", packet.Block.Number(), "hash", packet.Block.Hash())
 		return h.handleBlockBroadcast(peer, packet.Block, packet.TD)
 
 	case *eth.NewPooledTransactionHashesPacket:
@@ -211,6 +212,7 @@ func (h *ethHandler) handleBlockAnnounces(peer *eth.Peer, hashes []common.Hash, 
 // block broadcast for the local node to process.
 func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, td *big.Int) error {
 	// Schedule the block for import
+	log.Debug("Received new block at handleBlockBroadcast", "peer", peer.ID(), "number", block.Number(), "hash", block.Hash())
 	h.blockFetcher.Enqueue(peer.ID(), block)
 
 	// Assuming the block is importable by the peer, but possibly not yet done so,

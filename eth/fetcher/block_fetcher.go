@@ -275,6 +275,7 @@ func (f *BlockFetcher) Enqueue(peer string, block *types.Block) error {
 		origin: peer,
 		block:  block,
 	}
+	log.Debug("Received new block at Enqueue", "number", "peer", peer, block.Number(), "hash", block.Hash())
 	select {
 	case f.inject <- op:
 		return nil
@@ -384,6 +385,7 @@ func (f *BlockFetcher) loop() {
 			if f.light {
 				f.importHeaders(op)
 			} else {
+				log.Debug("Received new block at loop. before importBlocks", "peer", op.origin, "number", op.block.Number(), "hash", op.block.Hash())
 				f.importBlocks(op)
 			}
 		}
@@ -451,7 +453,7 @@ func (f *BlockFetcher) loop() {
 			if f.light {
 				continue
 			}
-			log.Debug("Before enqueue for block 1", "hash", op.block.Hash(), "number", op.block.Number())
+			log.Debug("Received new block at loop. before enqueue", "peer", op.origin, "number", op.block.Number(), "hash", op.block.Hash())
 			f.enqueue(op.origin, nil, op.block)
 
 		case hash := <-f.done:
@@ -860,6 +862,7 @@ func (f *BlockFetcher) importBlocks(op *blockOrHeaderInject) {
 			return
 		}
 		// Run the actual import and log any issues
+		log.Debug("Before insertChain at importBlocks", "peer", peer, "number", block.Number(), "hash", hash)
 		if _, err := f.insertChain(types.Blocks{block}); err != nil {
 			log.Debug("Propagated block import failed", "peer", peer, "number", block.Number(), "hash", hash, "err", err)
 			return
