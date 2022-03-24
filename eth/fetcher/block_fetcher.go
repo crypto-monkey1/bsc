@@ -451,6 +451,7 @@ func (f *BlockFetcher) loop() {
 			if f.light {
 				continue
 			}
+			log.Debug("Before enqueue for block", "hash", op.block.Hash(), "number", op.block.Number())
 			f.enqueue(op.origin, nil, op.block)
 
 		case hash := <-f.done:
@@ -618,11 +619,13 @@ func (f *BlockFetcher) loop() {
 			}
 			// Schedule the header for light fetcher import
 			for _, announce := range lightHeaders {
+				log.Debug("Before enqueue for header", "number", announce.header.Number)
 				f.enqueue(announce.origin, announce.header, nil)
 			}
 			// Schedule the header-only blocks for import
 			for _, block := range complete {
 				if announce := f.completing[block.Hash()]; announce != nil {
+					log.Debug("Before enqueue for block", "hash", block.Hash(), "number", block.Number())
 					f.enqueue(announce.origin, nil, block)
 				}
 			}
