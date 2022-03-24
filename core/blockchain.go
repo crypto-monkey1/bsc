@@ -1927,14 +1927,15 @@ func (bc *BlockChain) InsertChainWithoutSealVerification(block *types.Block) (in
 
 func (bc *BlockChain) GetLastReceivedBlock() map[string]interface{} {
 	return map[string]interface{}{
-		"number":     bc.lastReceievedBlock.Number(),
-		"miner":      bc.lastReceievedBlock.Coinbase(),
-		"difficulty": bc.lastReceievedBlock.Difficulty(),
-		"hash":       bc.lastReceievedBlock.Hash(),
-		"gasLimit":   bc.lastReceievedBlock.GasLimit(),
-		"gasUsed":    bc.lastReceievedBlock.GasUsed(),
-		"header":     bc.lastReceievedBlock.Header(),
-		"receivedAt": bc.lastReceievedBlock.ReceivedAt.UnixMilli(),
+		"number":              bc.lastReceievedBlock.Number(),
+		"timestamp":           bc.lastReceievedBlock.Time(),
+		"miner":               bc.lastReceievedBlock.Coinbase(),
+		"difficulty":          bc.lastReceievedBlock.Difficulty(),
+		"hash":                bc.lastReceievedBlock.Hash(),
+		"gasLimit":            bc.lastReceievedBlock.GasLimit(),
+		"gasUsed":             bc.lastReceievedBlock.GasUsed(),
+		"receivedAtUnixMilli": bc.lastReceievedBlock.ReceivedAt.UnixMilli(),
+		"receivedAtUTC":       bc.lastReceievedBlock.ReceivedAt.UTC(),
 	}
 }
 
