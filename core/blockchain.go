@@ -1925,8 +1925,16 @@ func (bc *BlockChain) InsertChainWithoutSealVerification(block *types.Block) (in
 	return n, err
 }
 
-func (bc *BlockChain) GetLastReceivedBlock() *types.Block {
-	return bc.lastReceievedBlock
+func (bc *BlockChain) GetLastReceivedBlock() map[string]interface{} {
+	return map[string]interface{}{
+		"number":     bc.lastReceievedBlock.Number(),
+		"miner":      bc.lastReceievedBlock.Coinbase(),
+		"difficulty": bc.lastReceievedBlock.Difficulty(),
+		"hash":       bc.lastReceievedBlock.Hash(),
+		"gasLimit":   bc.lastReceievedBlock.GasLimit(),
+		"gasUsed":    bc.lastReceievedBlock.GasUsed(),
+		"header":     bc.lastReceievedBlock.Header(),
+	}
 }
 
 // insertChain is the internal implementation of InsertChain, which assumes that
