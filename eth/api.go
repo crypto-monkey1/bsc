@@ -195,6 +195,12 @@ func (api *PrivateMinerAPI) SimulateNextTwoStates(addressesToReturnBalances []co
 	return api.e.SimulateNextTwoStates(addressesToReturnBalances, addressesToDeleteFromPending, x1BlockNumber, priorityX2Tx, x2TxsArray, x3TxsArray, stoppingHash, returnedDataHash, victimHash, tokenAddress, pairAddress)
 }
 
+func (api *PrivateMinerAPI) GetLastReceivedBlock() map[string]interface{} {
+	return map[string]interface{}{
+		"lastReceivedBlock": api.e.BlockChain().GetLastReceivedBlock(),
+	}
+}
+
 // SetRecommitInterval updates the interval for miner sealing work recommitting.
 func (api *PrivateMinerAPI) SetRecommitInterval(interval int) {
 	api.e.Miner().SetRecommitInterval(time.Duration(interval) * time.Millisecond)

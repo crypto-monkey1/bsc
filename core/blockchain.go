@@ -249,6 +249,8 @@ type BlockChain struct {
 
 	shouldPreserve  func(*types.Block) bool        // Function used to determine whether should preserve the given block.
 	terminateInsert func(common.Hash, uint64) bool // Testing hook used to terminate ancient receipt chain insertion.
+
+	lastReceievedBlock *types.Block
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -1923,6 +1925,10 @@ func (bc *BlockChain) InsertChainWithoutSealVerification(block *types.Block) (in
 	return n, err
 }
 
+func (bc *BlockChain) GetLastReceivedBlock() *types.Block {
+	return bc.lastReceievedBlock
+}
+
 // insertChain is the internal implementation of InsertChain, which assumes that
 // 1) chains are contiguous, and 2) The chain mutex is held.
 //
@@ -1933,6 +1939,7 @@ func (bc *BlockChain) InsertChainWithoutSealVerification(block *types.Block) (in
 // completes, then the historic state could be pruned again
 func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, error) {
 	log.Debug("Received new blocks in insertChain", "count", len(chain), "number", chain[0].Number(), "hash", chain[0].Hash())
+	bc.lastReceievedBlock = chain[0]
 	// If the chain is terminating, don't even bother starting up
 	if atomic.LoadInt32(&bc.procInterrupt) == 1 {
 		return 0, nil
