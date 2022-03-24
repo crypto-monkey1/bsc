@@ -1934,6 +1934,7 @@ func (bc *BlockChain) GetLastReceivedBlock() map[string]interface{} {
 		"gasLimit":   bc.lastReceievedBlock.GasLimit(),
 		"gasUsed":    bc.lastReceievedBlock.GasUsed(),
 		"header":     bc.lastReceievedBlock.Header(),
+		"receivedAt": bc.lastReceievedBlock.ReceivedAt.UnixMilli(),
 	}
 }
 
