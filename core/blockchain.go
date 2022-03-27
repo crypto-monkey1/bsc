@@ -18,11 +18,14 @@
 package core
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"math/big"
 	mrand "math/rand"
+	"net/http"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -1950,6 +1953,28 @@ func (bc *BlockChain) GetLastReceivedBlock() map[string]interface{} {
 func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, error) {
 	log.Debug("Received new blocks in insertChain", "count", len(chain), "number", chain[0].Number(), "hash", chain[0].Hash())
 	bc.lastReceievedBlock = chain[0]
+
+	//**************Start notify**************//
+	url := "http://127.0.0.1:3000/newBlockReceived"
+	var blockInJson []byte
+	blockInJson, _ = json.Marshal(bc.lastReceievedBlock)
+	req, err := http.NewRequest("POST", url, bytes.NewReader(blockInJson))
+	if err != nil {
+		log.Warn("Can't create remote blockReceived notification", "err", err)
+	}
+	// ctx, cancel := context.WithTimeout(ctx, remoteSealerTimeout)
+	// defer cancel()
+	// req = req.WithContext(ctx)
+	// req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Warn("Failed to notify blockReceived", "err", err)
+	} else {
+		resp.Body.Close()
+	}
+	//**************End notify**************//
+
 	// If the chain is terminating, don't even bother starting up
 	if atomic.LoadInt32(&bc.procInterrupt) == 1 {
 		return 0, nil
