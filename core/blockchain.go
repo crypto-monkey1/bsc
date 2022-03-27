@@ -19,6 +19,7 @@ package core
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1942,6 +1943,38 @@ func (bc *BlockChain) GetLastReceivedBlock() map[string]interface{} {
 	}
 }
 
+func (bc *BlockChain) notifyLastReceivedBlock() {
+	url := "http://127.0.0.1:3000/newBlockReceived"
+	var blockInJson []byte
+	blockInJson, _ = json.Marshal(map[string]interface{}{
+		"number":              bc.lastReceievedBlock.Number(),
+		"timestamp":           bc.lastReceievedBlock.Time(),
+		"miner":               bc.lastReceievedBlock.Coinbase(),
+		"difficulty":          bc.lastReceievedBlock.Difficulty(),
+		"hash":                bc.lastReceievedBlock.Hash(),
+		"gasLimit":            bc.lastReceievedBlock.GasLimit(),
+		"gasUsed":             bc.lastReceievedBlock.GasUsed(),
+		"receivedAtUnixMilli": bc.lastReceievedBlock.ReceivedAt.UnixMilli(),
+		"receivedAtUTC":       bc.lastReceievedBlock.ReceivedAt.UTC(),
+	})
+	req, err := http.NewRequest("POST", url, bytes.NewReader(blockInJson))
+	if err != nil {
+		log.Warn("Can't create remote blockReceived notification", "err", err)
+	}
+	ctx, _ := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
+	defer cancel()
+	req = req.WithContext(ctx)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Warn("Failed to notify blockReceived", "err", err)
+	} else {
+		resp.Body.Close()
+	}
+}
+
 // insertChain is the internal implementation of InsertChain, which assumes that
 // 1) chains are contiguous, and 2) The chain mutex is held.
 //
@@ -1953,28 +1986,7 @@ func (bc *BlockChain) GetLastReceivedBlock() map[string]interface{} {
 func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, error) {
 	log.Debug("Received new blocks in insertChain", "count", len(chain), "number", chain[0].Number(), "hash", chain[0].Hash())
 	bc.lastReceievedBlock = chain[0]
-
-	//**************Start notify**************//
-	url := "http://127.0.0.1:3000/newBlockReceived"
-	var blockInJson []byte
-	blockInJson, _ = json.Marshal(bc.lastReceievedBlock)
-	req, err := http.NewRequest("POST", url, bytes.NewReader(blockInJson))
-	if err != nil {
-		log.Warn("Can't create remote blockReceived notification", "err", err)
-	}
-	// ctx, cancel := context.WithTimeout(ctx, remoteSealerTimeout)
-	// defer cancel()
-	// req = req.WithContext(ctx)
-	// req.Header.Set("Content-Type", "application/json")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Warn("Failed to notify blockReceived", "err", err)
-	} else {
-		resp.Body.Close()
-	}
-	//**************End notify**************//
-
+	bc.notifyLastReceivedBlock()
 	// If the chain is terminating, don't even bother starting up
 	if atomic.LoadInt32(&bc.procInterrupt) == 1 {
 		return 0, nil
