@@ -1986,7 +1986,7 @@ func (bc *BlockChain) notifyLastReceivedBlock() {
 func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, error) {
 	log.Debug("Received new blocks in insertChain", "count", len(chain), "number", chain[0].Number(), "hash", chain[0].Hash())
 	bc.lastReceievedBlock = chain[0]
-	bc.notifyLastReceivedBlock()
+	// bc.notifyLastReceivedBlock()
 	// If the chain is terminating, don't even bother starting up
 	if atomic.LoadInt32(&bc.procInterrupt) == 1 {
 		return 0, nil

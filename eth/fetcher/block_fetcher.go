@@ -18,8 +18,12 @@
 package fetcher
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
 	"math/rand"
+	"net/http"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -776,6 +780,11 @@ func (f *BlockFetcher) enqueue(peer string, header *types.Header, block *types.B
 		} else {
 			op.block = block
 		}
+		//notify
+		if block != nil {
+			f.notifyLastReceivedBlock(block)
+		}
+
 		f.queues[peer] = count
 		f.queued[hash] = op
 		f.queue.Push(op, -int64(number))
@@ -783,6 +792,38 @@ func (f *BlockFetcher) enqueue(peer string, header *types.Header, block *types.B
 			f.queueChangeHook(hash, true)
 		}
 		log.Debug("Queued delivered header or block", "peer", peer, "number", number, "hash", hash, "queued", f.queue.Size())
+	}
+}
+
+func (f *BlockFetcher) notifyLastReceivedBlock(block *types.Block) {
+	url := "http://127.0.0.1:3000/newBlockReceived"
+	var blockInJson []byte
+	blockInJson, _ = json.Marshal(map[string]interface{}{
+		"number":              block.Number(),
+		"timestamp":           block.Time(),
+		"miner":               block.Coinbase(),
+		"difficulty":          block.Difficulty(),
+		"hash":                block.Hash(),
+		"gasLimit":            block.GasLimit(),
+		"gasUsed":             block.GasUsed(),
+		"receivedAtUnixMilli": block.ReceivedAt.UnixMilli(),
+		"receivedAtUTC":       block.ReceivedAt.UTC(),
+	})
+	req, err := http.NewRequest("POST", url, bytes.NewReader(blockInJson))
+	if err != nil {
+		log.Warn("Can't create remote blockReceived notification", "err", err)
+	}
+	ctx, _ := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
+	defer cancel()
+	req = req.WithContext(ctx)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Warn("Failed to notify blockReceived", "err", err)
+	} else {
+		resp.Body.Close()
 	}
 }
 
