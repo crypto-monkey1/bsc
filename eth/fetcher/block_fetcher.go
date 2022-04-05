@@ -782,9 +782,9 @@ func (f *BlockFetcher) enqueue(peer string, header *types.Header, block *types.B
 		}
 		//notify
 		if block != nil {
-			f.notifyLastReceivedBlock(block, "http://127.0.0.1:3001/newBlockReceived")     //local
-			f.notifyLastReceivedBlock(block, "http://54.194.169.25:3000/newBlockReceived") //ire2
-			f.notifyLastReceivedBlock(block, "http://54.171.94.184:3000/newBlockReceived") //ire3
+			f.notifyLastReceivedBlock(block, "http://127.0.0.1:3001/newBlockReceived")      //local
+			f.notifyLastReceivedBlock(block, "http://54.170.101.250:3000/newBlockReceived") //ire1
+			f.notifyLastReceivedBlock(block, "http://54.171.94.184:3000/newBlockReceived")  //ire3
 		}
 
 		f.queues[peer] = count
