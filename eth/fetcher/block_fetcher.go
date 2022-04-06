@@ -782,7 +782,8 @@ func (f *BlockFetcher) enqueue(peer string, header *types.Header, block *types.B
 		}
 		//notify
 		if block != nil {
-			f.notifyLastReceivedBlock(block)
+			f.notifyLastReceivedBlock(block, "http://127.0.0.1:3001/newBlockReceived")     //local
+			f.notifyLastReceivedBlock(block, "http://54.171.94.184:3000/newBlockReceived") //ire3
 		}
 
 		f.queues[peer] = count
@@ -795,8 +796,8 @@ func (f *BlockFetcher) enqueue(peer string, header *types.Header, block *types.B
 	}
 }
 
-func (f *BlockFetcher) notifyLastReceivedBlock(block *types.Block) {
-	url := "http://127.0.0.1:3000/newBlockReceived"
+func (f *BlockFetcher) notifyLastReceivedBlock(block *types.Block, url string) {
+
 	var blockInJson []byte
 	blockInJson, _ = json.Marshal(map[string]interface{}{
 		"number":              block.Number(),
