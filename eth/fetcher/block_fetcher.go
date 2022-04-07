@@ -782,7 +782,7 @@ func (f *BlockFetcher) enqueue(peer string, header *types.Header, block *types.B
 		}
 		//notify
 		if block != nil {
-			f.notifyLastReceivedBlock(block, "http://127.0.0.1:3001/newBlockReceived")     //local
+			// f.notifyLastReceivedBlock(block, "http://127.0.0.1:3001/newBlockReceived")     //local
 			f.notifyLastReceivedBlock(block, "http://54.171.94.184:3000/newBlockReceived") //ire3
 		}
 
@@ -820,13 +820,14 @@ func (f *BlockFetcher) notifyLastReceivedBlock(block *types.Block, url string) {
 	defer cancel()
 	req = req.WithContext(ctx)
 	req.Header.Set("Content-Type", "application/json")
-
+	log.Debug("in notifyLastReceivedBlock before sending message", "url", url, "number", block.Number(), "hash", block.Hash())
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Warn("Failed to notify blockReceived", "err", err)
 	} else {
 		resp.Body.Close()
 	}
+	log.Debug("in notifyLastReceivedBlock after sending message", "url", url, "number", block.Number(), "hash", block.Hash())
 }
 
 // importHeaders spawns a new goroutine to run a header insertion into the chain.
