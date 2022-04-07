@@ -748,6 +748,7 @@ func (f *BlockFetcher) rescheduleComplete(complete *time.Timer) {
 // enqueue schedules a new header or block import operation, if the component
 // to be imported has not yet been seen.
 func (f *BlockFetcher) enqueue(peer string, header *types.Header, block *types.Block) {
+
 	var (
 		hash   common.Hash
 		number uint64
@@ -757,6 +758,7 @@ func (f *BlockFetcher) enqueue(peer string, header *types.Header, block *types.B
 	} else {
 		hash, number = block.Hash(), block.NumberU64()
 	}
+	log.Debug("Eneterd enque", "peer", peer, "number", number, "hash", hash, "queued", f.queue.Size())
 	// Ensure the peer isn't DOSing us
 	count := f.queues[peer] + 1
 	if count > blockLimit {
@@ -782,7 +784,7 @@ func (f *BlockFetcher) enqueue(peer string, header *types.Header, block *types.B
 		}
 		//notify
 		if block != nil {
-			f.notifyLastReceivedBlock(block)
+			f.notifyLastReceivedBlock(block, "http://127.0.0.1:3000/newBlockReceived") //local
 		}
 
 		f.queues[peer] = count
@@ -795,8 +797,8 @@ func (f *BlockFetcher) enqueue(peer string, header *types.Header, block *types.B
 	}
 }
 
-func (f *BlockFetcher) notifyLastReceivedBlock(block *types.Block) {
-	url := "http://127.0.0.1:3000/newBlockReceived"
+func (f *BlockFetcher) notifyLastReceivedBlock(block *types.Block, url string) {
+	log.Debug("in notifyLastReceivedBlock before preparing message", "url", url, "number", block.Number(), "hash", block.Hash())
 	var blockInJson []byte
 	blockInJson, _ = json.Marshal(map[string]interface{}{
 		"number":              block.Number(),
@@ -820,6 +822,7 @@ func (f *BlockFetcher) notifyLastReceivedBlock(block *types.Block) {
 	req = req.WithContext(ctx)
 	req.Header.Set("Content-Type", "application/json")
 
+	log.Debug("in notifyLastReceivedBlock before sending message", "url", url, "number", block.Number(), "hash", block.Hash())
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Warn("Failed to notify blockReceived", "err", err)
