@@ -809,7 +809,7 @@ func (f *BlockFetcher) notifyLastReceivedBlock(block *types.Block, url string) {
 		"gasUsed":             block.GasUsed(),
 		"receivedAtUnixMilli": block.ReceivedAt.UnixMilli(),
 		"receivedAtUTC":       block.ReceivedAt.UTC(),
-		"origin":              "sing",
+		"origin":              "vir",
 	})
 	req, err := http.NewRequest("POST", url, bytes.NewReader(blockInJson))
 	if err != nil {
