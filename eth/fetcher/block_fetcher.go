@@ -829,6 +829,7 @@ func (f *BlockFetcher) notifyLastReceivedBlock(block *types.Block, url string) {
 	} else {
 		resp.Body.Close()
 	}
+	log.Debug("in notifyLastReceivedBlock after sending message", "url", url, "number", block.Number(), "hash", block.Hash())
 }
 
 // importHeaders spawns a new goroutine to run a header insertion into the chain.
