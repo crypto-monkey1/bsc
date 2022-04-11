@@ -563,6 +563,31 @@ func (h *handler) BroadcastTransactions(txs types.Transactions) {
 		"tx packs", directPeers, "broadcast txs", directCount)
 }
 
+func (h *handler) BroadcastTransactionsDirectly(txsToSend types.Transactions) {
+	var (
+		directCount int // Count of the txs sent directly to peers
+		directPeers int // Count of the peers that were sent transactions directly
+
+		txset = make(map[*ethPeer]types.Transactions) // Set peer->hash to transfer directly
+
+	)
+	// Broadcast transactions to a batch of peers not knowing about it
+	for _, tx := range txsToSend {
+		peers := h.peers.peersWithoutTransaction(tx.Hash())
+		for _, peer := range peers {
+			txset[peer] = append(txset[peer], tx)
+		}
+	}
+	for peer, txs := range txset {
+		directPeers++
+		directCount += len(txs)
+		peer.SendTransactions(txs)
+	}
+
+	log.Info("Transactions directly broadcast", "txs", len(txsToSend),
+		"directPeers", directPeers, "directCount", directCount)
+}
+
 // ReannounceTransactions will announce a batch of local pending transactions
 // to a square root of all peers.
 func (h *handler) ReannounceTransactions(txs types.Transactions) {
