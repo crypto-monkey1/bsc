@@ -585,7 +585,7 @@ func (h *handler) BroadcastTransactionsDirectly(txsToSend types.Transactions) {
 	}
 
 	log.Info("Transactions directly broadcast", "txs", len(txsToSend),
-		"directPeers", directPeers, "directCount", directCount)
+		"directPeers", directPeers, "directCount", directCount, "numToSend", len(txsToSend), "hashOfFirst", txsToSend[0].Hash())
 }
 
 // ReannounceTransactions will announce a batch of local pending transactions
