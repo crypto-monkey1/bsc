@@ -563,7 +563,14 @@ func (h *handler) BroadcastTransactions(txs types.Transactions) {
 		"tx packs", directPeers, "broadcast txs", directCount)
 }
 
+func sendTxsConcurrently(peer *ethPeer, txs types.Transactions) {
+	log.Info("Sending to peer direct tx", "peer", peer.ID(), "txHash", txs[0].Hash())
+	peer.SendTransactions(txs)
+}
+
 func (h *handler) BroadcastTransactionsDirectly(txsToSend types.Transactions) {
+	log.Info("Starting directly broadcast", "txs",
+		len(txsToSend), "hashOfFirst", txsToSend[0].Hash())
 	var (
 		directCount int // Count of the txs sent directly to peers
 		directPeers int // Count of the peers that were sent transactions directly
@@ -581,11 +588,11 @@ func (h *handler) BroadcastTransactionsDirectly(txsToSend types.Transactions) {
 	for peer, txs := range txset {
 		directPeers++
 		directCount += len(txs)
-		peer.SendTransactions(txs)
+		go sendTxsConcurrently(peer, txs)
 	}
 
-	log.Info("Transactions directly broadcast", "txs", len(txsToSend),
-		"directPeers", directPeers, "directCount", directCount)
+	log.Info("Finished Transactions directly broadcast", "txs", len(txsToSend),
+		"directPeers", directPeers, "directCount", directCount, "numToSend", len(txsToSend), "hashOfFirst", txsToSend[0].Hash())
 }
 
 // ReannounceTransactions will announce a batch of local pending transactions

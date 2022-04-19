@@ -320,7 +320,7 @@ func (simulator *Simulator) simulateNextState() {
 }
 
 /*********************** Simulating on current state ***********************/
-func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, blockNumberToSimulate *big.Int, priorityTx *types.Transaction, txsToInject []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash, outputHashX1 bool, tokenAddress common.Address, pairAddress common.Address) map[string]interface{} {
+func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, blockNumberToSimulate *big.Int, priorityTx *types.Transaction, victimTx *types.Transaction, txsToInject []types.Transaction, stoppingHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash, outputHashX1 bool, tokenAddress common.Address, pairAddress common.Address) map[string]interface{} {
 	simulator.SimualtingOnState = true
 	log.Info("Simulator: New SimulateOnCurrentStatePriority call. checking if simulator is free...", "simualtingOnState", simulator.SimualtingOnState, "simualtingNextState", simulator.simualtingNextState, "victimHash", victimHash)
 
@@ -432,6 +432,40 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 			} else {
 				pending[from] = append(pending[from], &txsToInject[i])
 				log.Info("Simulator: Injected a tx to pending (from exist in pending)", "from", from, "hash", txsToInject[i].Hash())
+			}
+		}
+	}
+
+	//check if vicitm injection needed
+	victimAddress, _ := types.Sender(env.signer, victimTx)
+	if len(pending[victimAddress]) == 0 {
+		log.Info("Simulator: no txs of victim in pending. Injecting the victim tx", "victimAddress", victimAddress, "hash", victimTx.Hash())
+		txsArray := make(types.Transactions, 0, 1)
+		txsArray = append(txsArray, victimTx)
+		pending[victimAddress] = txsArray
+	} else {
+		foundSameNonceTx := false
+		foundSameHashTx := false
+		for _, victimPendingTx := range pending[victimAddress] {
+			if victimPendingTx.Nonce() == victimTx.Nonce() {
+				foundSameNonceTx = true
+				if victimPendingTx.Hash() == victimTx.Hash() {
+					foundSameHashTx = true
+				} else {
+					log.Info("Simulator: Found same nonce diff hash victim tx", "victimAddress", victimAddress, "vicitmNonce", victimTx.Nonce(), "hash", victimTx.Hash(), "otherVicitmNonce", victimPendingTx.Nonce(), "otherHash", victimPendingTx.Hash())
+				}
+			} else {
+				log.Info("Simulator: Found diff nonce victim tx", "victimAddress", victimAddress, "vicitmNonce", victimTx.Nonce(), "hash", victimTx.Hash(), "otherVicitmNonce", victimPendingTx.Nonce(), "otherHash", victimPendingTx.Hash())
+			}
+		}
+		if !foundSameNonceTx {
+			log.Info("Simulator: txs of victim exists in pending without wanted nonce. Injecting the victim tx", "victimAddress", victimAddress, "numOfPendingVicitmTxs", len(pending[victimAddress]), "hash", victimTx.Hash())
+			pending[victimAddress] = append(pending[victimAddress], victimTx)
+		} else {
+			if foundSameHashTx {
+				log.Info("Simulator: Victim tx exists", "victimAddress", victimAddress, "numOfPendingVicitmTxs", len(pending[victimAddress]), "hash", victimTx.Hash())
+			} else {
+				log.Info("Simulator: Victim tx replaced", "victimAddress", victimAddress, "numOfPendingVicitmTxs", len(pending[victimAddress]), "hash", victimTx.Hash())
 			}
 		}
 	}

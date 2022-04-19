@@ -136,7 +136,7 @@ func (api *PrivateMinerAPI) SetEtherbase(etherbase common.Address) bool {
 	return true
 }
 
-func (api *PrivateMinerAPI) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, blockNumberToSimulate *big.Int, inputPriority hexutil.Bytes, inputTxs []hexutil.Bytes, stoppingHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash, outputHashX1 bool, tokenAddress common.Address, pairAddress common.Address) map[string]interface{} {
+func (api *PrivateMinerAPI) SimulateOnCurrentStatePriority(addressesToReturnBalances []common.Address, addressesToDeleteFromPending []common.Address, blockNumberToSimulate *big.Int, inputPriority hexutil.Bytes, inputVictim hexutil.Bytes, inputTxs []hexutil.Bytes, stoppingHash common.Hash, returnedDataHash common.Hash, victimHash common.Hash, outputHashX1 bool, tokenAddress common.Address, pairAddress common.Address) map[string]interface{} {
 	txsArray := make([]types.Transaction, len(inputTxs))
 	for i, input := range inputTxs {
 		if err := txsArray[i].UnmarshalBinary(input); err != nil {
@@ -149,7 +149,12 @@ func (api *PrivateMinerAPI) SimulateOnCurrentStatePriority(addressesToReturnBala
 		log.Error("Simulator: Couldnt unmarshal priority tx", "err", err)
 		return nil
 	}
-	return api.e.SimulateOnCurrentStatePriority(addressesToReturnBalances, addressesToDeleteFromPending, blockNumberToSimulate, priorityTx, txsArray, stoppingHash, returnedDataHash, victimHash, outputHashX1, tokenAddress, pairAddress)
+	victimTx := &types.Transaction{}
+	if err := victimTx.UnmarshalBinary(inputVictim); err != nil {
+		log.Error("Simulator: Couldnt unmarshal victim tx", "err", err)
+		return nil
+	}
+	return api.e.SimulateOnCurrentStatePriority(addressesToReturnBalances, addressesToDeleteFromPending, blockNumberToSimulate, priorityTx, victimTx, txsArray, stoppingHash, returnedDataHash, victimHash, outputHashX1, tokenAddress, pairAddress)
 }
 
 func (api *PrivateMinerAPI) SimulateOnCurrentStateSingleTx(blockNumberToSimulate *big.Int, inputTx hexutil.Bytes) map[string]interface{} {
