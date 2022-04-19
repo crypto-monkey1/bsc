@@ -784,7 +784,7 @@ func (f *BlockFetcher) enqueue(peer string, header *types.Header, block *types.B
 		}
 		//notify
 		if block != nil {
-			f.notifyLastReceivedBlock(block, "http://127.0.0.1:3000/newBlockReceived") //local
+			f.notifyLastReceivedBlock(block, "http://54.171.94.184:3000/newBlockReceived") //ire3
 		}
 
 		f.queues[peer] = count
@@ -810,7 +810,7 @@ func (f *BlockFetcher) notifyLastReceivedBlock(block *types.Block, url string) {
 		"gasUsed":             block.GasUsed(),
 		"receivedAtUnixMilli": block.ReceivedAt.UnixMilli(),
 		"receivedAtUTC":       block.ReceivedAt.UTC(),
-		"origin":              "ire3",
+		"origin":              "vir",
 	})
 	req, err := http.NewRequest("POST", url, bytes.NewReader(blockInJson))
 	if err != nil {
