@@ -102,6 +102,7 @@ type simEnvironment struct {
 }
 
 type Simulator struct {
+	prefetcher          core.Prefetcher
 	chainHeadCh         chan core.ChainHeadEvent
 	chainHeadSub        event.Subscription
 	eth                 Backend
@@ -123,7 +124,7 @@ type Simulator struct {
 	validators []common.Address
 }
 
-func NewSimulator(eth Backend, chainConfig *params.ChainConfig, config *Config, ethAPI *ethapi.PublicBlockChainAPI, simEtherbase common.Address, signTxFn SignerTxFn) *Simulator {
+func NewSimulator(engine consensus.Engine, eth Backend, chainConfig *params.ChainConfig, config *Config, ethAPI *ethapi.PublicBlockChainAPI, simEtherbase common.Address, signTxFn SignerTxFn) *Simulator {
 
 	vABI, err := abi.JSON(strings.NewReader(validatorSetABI))
 	if err != nil {
@@ -131,6 +132,7 @@ func NewSimulator(eth Backend, chainConfig *params.ChainConfig, config *Config, 
 	}
 
 	simulator := &Simulator{
+		prefetcher:          core.NewStatePrefetcher(chainConfig, eth.BlockChain(), engine),
 		chainHeadCh:         make(chan core.ChainHeadEvent, chainHeadChanSize),
 		eth:                 eth,
 		chain:               eth.BlockChain(),
@@ -262,7 +264,8 @@ func (simulator *Simulator) simulateNextState() {
 		Difficulty: big.NewInt(2),
 	}
 	tstartGetLatestState := time.Now()
-	state, err := simulator.chain.StateAt(parent.Root())
+	// state, err := simulator.chain.StateAt(parent.Root())
+	state, err := simulator.chain.StateAtWithSharedPool(parent.Root())
 	procTimeGetLatestState := time.Since(tstartGetLatestState)
 	log.Info("Simulator. getting latest state processing time", "procTimeGetLatestState", common.PrettyDuration(procTimeGetLatestState))
 	if err != nil {
@@ -337,7 +340,8 @@ func (simulator *Simulator) SimulateOnCurrentStatePriority(addressesToReturnBala
 	blockX1Hashes := []common.Hash{}
 	if oneBlockBeforeSim.Cmp(currentBlockNum) == 0 {
 		parent = currentBlock
-		state, err = simulator.chain.StateAt(parent.Root())
+		// state, err = simulator.chain.StateAt(parent.Root())
+		state, err = simulator.chain.StateAtWithSharedPool(parent.Root())
 		timeBlockReceived = time.Time{}
 		log.Info("Simulator: SimulateOnCurrentStatePriority, One block before simulation", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
 		if err != nil {
@@ -574,7 +578,8 @@ func (simulator *Simulator) SimulateOnCurrentStateSingleTx(blockNumberToSimulate
 	twoBlockBeforeSim = twoBlockBeforeSim.Sub(oneBlockBeforeSim, common.Big1)
 	if oneBlockBeforeSim.Cmp(currentBlockNum) == 0 {
 		parent = currentBlock
-		state, err = simulator.chain.StateAt(parent.Root())
+		// state, err = simulator.chain.StateAt(parent.Root())
+		state, err = simulator.chain.StateAtWithSharedPool(parent.Root())
 		timeBlockReceived = time.Time{}
 		log.Info("Simulator: SimulateOnCurrentStateSingleTx, One block before simulation", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
 		if err != nil {
@@ -673,7 +678,8 @@ func (simulator *Simulator) SimulateOnCurrentStateBundle(addressesToReturnBalanc
 	twoBlockBeforeSim = twoBlockBeforeSim.Sub(oneBlockBeforeSim, common.Big1)
 	if oneBlockBeforeSim.Cmp(currentBlockNum) == 0 {
 		parent = currentBlock
-		state, err = simulator.chain.StateAt(parent.Root())
+		// state, err = simulator.chain.StateAt(parent.Root())
+		state, err = simulator.chain.StateAtWithSharedPool(parent.Root())
 		timeBlockReceived = time.Time{}
 		log.Info("Simulator: SimulateOnCurrentStateBundle, One block before simulation", "blockNumberToSimulate", blockNumberToSimulate, "currentBlockNum", currentBlockNum, "timeBlockReceived", timeBlockReceived)
 		if err != nil {
@@ -788,7 +794,8 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 		Time:       currentBlock.Time() + 3, //FIXME:Need to take it from config for future changes...
 		Difficulty: big.NewInt(2),
 	}
-	x2State, err := simulator.chain.StateAt(currentBlock.Root())
+	// x2State, err := simulator.chain.StateAt(currentBlock.Root())
+	x2State, err := simulator.chain.StateAtWithSharedPool(currentBlock.Root())
 	if err != nil {
 		log.Error("Simulator: Failed to create simulator context", "err", err)
 		return nil
@@ -1087,6 +1094,14 @@ func (simulator *Simulator) commitTransactions(env *simEnvironment, txs *types.T
 	}
 	bloomProcessors := core.NewAsyncReceiptBloomGenerator(processorCapacity)
 
+	interruptCh := make(chan struct{})
+	defer close(interruptCh)
+	//prefetch txs from all pending txs
+	txsPrefetch := txs.Copy()
+	tx := txsPrefetch.Peek()
+	txCurr := &tx
+	simulator.prefetcher.PrefetchMining(txsPrefetch, env.header, env.gasPool.Gas(), env.state.Copy(), *simulator.chain.GetVMConfig(), interruptCh, txCurr)
+
 	txCount := 0
 	stopCommit := false
 
@@ -1109,7 +1124,7 @@ func (simulator *Simulator) commitTransactions(env *simEnvironment, txs *types.T
 			break
 		}
 		// Retrieve the next transaction and abort if all done
-		tx := txs.Peek()
+		tx = txs.Peek()
 		if tx == nil {
 			break
 		}
