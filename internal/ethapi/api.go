@@ -2781,6 +2781,7 @@ type MyLog struct {
 
 // SendBundleArgs represents the arguments for a call.
 type CallBundleArgs struct {
+	TxsArgs                []TransactionArgs     `json:"txsArgs"`
 	Txs                    []hexutil.Bytes       `json:"txs"`
 	AccountsToGetBalance   []common.Address      `json:"accountsToGetBalance"`
 	BlockNumber            rpc.BlockNumber       `json:"blockNumber"`
@@ -2804,6 +2805,18 @@ func (s *BundleAPI) CallBundle(ctx context.Context, args CallBundleArgs, overrid
 	}
 
 	var txs types.Transactions
+
+	for i, _ := range args.TxsArgs {
+		if args.TxsArgs[i].From == nil {
+			return nil, errors.New("From field is missing")
+		}
+		if err := args.TxsArgs[i].setDefaults(ctx, s.b); err != nil {
+			return nil, err
+		}
+
+		tx := args.TxsArgs[i].ToTransaction()
+		txs = append(txs, tx)
+	}
 
 	for _, encodedTx := range args.Txs {
 		tx := new(types.Transaction)
