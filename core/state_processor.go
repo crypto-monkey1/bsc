@@ -582,3 +582,19 @@ func ApplyTransactionWithResult(config *params.ChainConfig, bc ChainContext, aut
 	}()
 	return applyTransactionWithResult(msg, config, bc, author, gp, statedb, header, tx, usedGas, vmenv, receiptProcessors...)
 }
+
+func ApplyTransactionArgWithResult(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, msg types.Message, tx *types.Transaction, usedGas *uint64, cfg vm.Config, receiptProcessors ...ReceiptProcessor) (*types.Receipt, *ExecutionResult, error) {
+	// msg, err := tx.AsMessage(types.MakeSigner(config, header.Number))
+	// if err != nil {
+	// 	return nil, nil, err
+	// }
+	// Create a new context to be used in the EVM environment
+	blockContext := NewEVMBlockContext(header, bc, author)
+	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, config, cfg)
+	defer func() {
+		ite := vmenv.Interpreter()
+		vm.EVMInterpreterPool.Put(ite)
+		vm.EvmPool.Put(vmenv)
+	}()
+	return applyTransactionWithResult(msg, config, bc, author, gp, statedb, header, tx, usedGas, vmenv, receiptProcessors...)
+}

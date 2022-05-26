@@ -2822,7 +2822,7 @@ type CallBundleArgs struct {
 // The sender is responsible for signing the transactions and using the correct
 // nonce and ensuring validity
 func (s *BundleAPI) CallBundle(ctx context.Context, args CallBundleArgs, overrides *StateOverride) (map[string]interface{}, error) {
-	if len(args.Txs) == 0 {
+	if len(args.Txs) == 0 && len(args.TxsArgs) == 0 {
 		return nil, errors.New("bundle missing txs")
 	}
 
@@ -2934,7 +2934,22 @@ func (s *BundleAPI) CallBundle(ctx context.Context, args CallBundleArgs, overrid
 		coinbaseBalanceBeforeTx := state.GetBalance(coinbase)
 		state.Prepare(tx.Hash(), common.Hash{}, i)
 
-		receipt, result, err := core.ApplyTransactionWithResult(s.b.ChainConfig(), s.chain, &coinbase, gp, state, header, tx, &header.GasUsed, vmconfig)
+		var (
+			receipt *types.Receipt
+			result  *core.ExecutionResult
+			err     error
+		)
+
+		if i < len(args.TxsArgs) {
+			msg, err := args.TxsArgs[i].ToMessage(0)
+			if err != nil {
+				return nil, err
+			}
+			receipt, result, err = core.ApplyTransactionArgWithResult(s.b.ChainConfig(), s.chain, &coinbase, gp, state, header, msg, tx, &header.GasUsed, vmconfig)
+		} else {
+			receipt, result, err = core.ApplyTransactionWithResult(s.b.ChainConfig(), s.chain, &coinbase, gp, state, header, tx, &header.GasUsed, vmconfig)
+		}
+
 		if err != nil {
 			return nil, fmt.Errorf("err1: %w; txhash %s", err, tx.Hash())
 		}
@@ -2954,9 +2969,15 @@ func (s *BundleAPI) CallBundle(ctx context.Context, args CallBundleArgs, overrid
 		logsStartIndex = len(logs)
 
 		txHash := tx.Hash().String()
-		from, err := types.Sender(signer, tx)
-		if err != nil {
-			return nil, fmt.Errorf("err2: %w; txhash %s", err, tx.Hash())
+		var from common.Address
+
+		if i < len(args.TxsArgs) {
+			from = *args.TxsArgs[i].From
+		} else {
+			from, err = types.Sender(signer, tx)
+			if err != nil {
+				return nil, fmt.Errorf("err2: %w; txhash %s", err, tx.Hash())
+			}
 		}
 		to := "0x"
 		if tx.To() != nil {
