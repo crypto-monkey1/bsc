@@ -242,7 +242,15 @@ func (args *TransactionArgs) ToMessage(globalGasCap uint64) (types.Message, erro
 	if args.AccessList != nil {
 		accessList = *args.AccessList
 	}
-	msg := types.NewMessage(addr, args.To, 0, value, gas, gasPrice, data, accessList, true)
+
+	var nonce uint64 
+	if args.Nonce == nil {
+		nonce = 0
+	} else {
+		nonce = uint64(*args.Nonce)
+	}
+	
+	msg := types.NewMessage(addr, args.To, nonce, value, gas, gasPrice, data, accessList, true)
 	return msg, nil
 }
 
