@@ -2822,6 +2822,12 @@ type CallBundleArgs struct {
 // The sender is responsible for signing the transactions and using the correct
 // nonce and ensuring validity
 func (s *BundleAPI) CallBundle(ctx context.Context, args CallBundleArgs, overrides *StateOverride) (map[string]interface{}, error) {
+
+	state, parent, err := s.b.StateAndHeaderByNumberOrHash(ctx, args.StateBlockNumberOrHash)
+	if state == nil || err != nil {
+		return nil, err
+	}
+
 	if len(args.Txs) == 0 && len(args.TxsArgs) == 0 {
 		return nil, errors.New("bundle missing txs")
 	}
@@ -2832,6 +2838,8 @@ func (s *BundleAPI) CallBundle(ctx context.Context, args CallBundleArgs, overrid
 		if args.TxsArgs[i].From == nil {
 			return nil, errors.New("From field is missing")
 		}
+		nonce := state.GetNonce(*args.TxsArgs[i].From)
+		args.TxsArgs[i].Nonce = (*hexutil.Uint64)(&nonce)
 		if err := args.TxsArgs[i].setDefaults(ctx, s.b); err != nil {
 			return nil, err
 		}
@@ -2854,10 +2862,7 @@ func (s *BundleAPI) CallBundle(ctx context.Context, args CallBundleArgs, overrid
 		timeoutMilliSeconds = *args.Timeout
 	}
 	timeout := time.Millisecond * time.Duration(timeoutMilliSeconds)
-	state, parent, err := s.b.StateAndHeaderByNumberOrHash(ctx, args.StateBlockNumberOrHash)
-	if state == nil || err != nil {
-		return nil, err
-	}
+
 	if err := overrides.Apply(state); err != nil {
 		return nil, err
 	}
@@ -2941,9 +2946,9 @@ func (s *BundleAPI) CallBundle(ctx context.Context, args CallBundleArgs, overrid
 		)
 
 		if i < len(args.TxsArgs) {
-			msg, err := args.TxsArgs[i].ToMessage(0)
-			if err != nil {
-				return nil, err
+			msg, err2 := args.TxsArgs[i].ToMessage(0)
+			if err2 != nil {
+				return nil, err2
 			}
 			receipt, result, err = core.ApplyTransactionArgWithResult(s.b.ChainConfig(), s.chain, &coinbase, gp, state, header, msg, tx, &header.GasUsed, vmconfig)
 		} else {
