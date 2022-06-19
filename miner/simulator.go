@@ -1079,7 +1079,11 @@ func (simulator *Simulator) SimulateNextTwoStates(addressesToReturnBalances []co
 
 func (simulator *Simulator) commitTransactions(env *simEnvironment, txs *types.TransactionsByPriceAndNonce, priorityTx *types.Transaction, prevHeader *types.Header, stoppingHash common.Hash) bool {
 	env.gasPool = new(core.GasPool).AddGas(env.header.GasLimit)
-	env.gasPool.SubGas(params.SystemTxsGas)
+	if simulator.chain.Config().IsEuler(env.header.Number) {
+		env.gasPool.SubGas(params.SystemTxsGas * 3)
+	} else {
+		env.gasPool.SubGas(params.SystemTxsGas)
+	}
 
 	processorCapacity := 100
 	if txs.CurrentSize() < processorCapacity {
