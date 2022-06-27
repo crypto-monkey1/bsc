@@ -1395,7 +1395,7 @@ func (simulator *Simulator) getCurrentValidators(blockHash common.Hash) ([]commo
 	msgData := (hexutil.Bytes)(data)
 	toAddress := common.HexToAddress(systemcontracts.ValidatorContract)
 	gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
-	result, err := simulator.ethAPI.Call(ctx, ethapi.CallArgs{
+	result, err := simulator.ethAPI.Call(ctx, ethapi.TransactionArgs{
 		Gas:  &gas,
 		To:   &toAddress,
 		Data: &msgData,
